@@ -1,0 +1,27 @@
+# FlowState Python dependencies (API, database, ML, and video analysis).
+# TensorFlow and PyTorch are large packages; installation may take several minutes.
+
+# API, configuration, authentication, and file uploads
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0,<4.1
+python-multipart>=0.0.9
+python-dotenv>=1.0
+
+# Database and data processing
+SQLAlchemy>=2.0,<3
+psycopg2-binary>=2.9
+pandas>=2.2
+numpy>=1.26
+
+# Machine learning and model persistence
+scikit-learn>=1.6,<2
+joblib>=1.4
+tensorflow-cpu>=2.18,<2.22
+
+# Computer vision and uploaded video analysis
+ultralytics>=8.3
+opencv-python>=4.10
+torch>=2.5
