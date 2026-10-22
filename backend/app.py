@@ -5,7 +5,6 @@ import hmac
 import json
 import os
 import math
-import threading
 import time
 import urllib.error
 import urllib.parse
@@ -282,12 +281,6 @@ def current_account(authorization: str | None = Header(default=None)):
     return {"username": claims["sub"], "role": claims["role"]}
 
 
-GEOCODE_LOCK = threading.Lock()
-LAST_GEOCODE_REQUEST = 0.0
-GEOCODER = os.getenv("NOMINATIM_BASE_URL", "https://nominatim.openstreetmap.org").rstrip("/")
-GEOCODER_AGENT = os.getenv("GEOCODER_USER_AGENT", "BengaluruTrafficMonitor/0.2 (educational local project)")
-
-
 def external_json(url: str, user_agent: str = "BengaluruTrafficMonitor/0.2"):
     request = urllib.request.Request(url, headers={"User-Agent": user_agent, "Accept": "application/json"})
     try:
@@ -297,42 +290,71 @@ def external_json(url: str, user_agent: str = "BengaluruTrafficMonitor/0.2"):
         raise HTTPException(502, "The configured external data provider could not be reached.") from exc
 
 
+def google_post_json(url: str, payload: dict):
+    key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(503, "Google Maps services are not configured. Add GOOGLE_MAPS_API_KEY to the project .env file.")
+    request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers={
+        "Content-Type": "application/json", "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+    })
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise HTTPException(502, "Google Routes could not calculate this route. Check the server key, billing, and Routes API access.") from exc
+
+
+def decode_google_polyline(encoded: str) -> list[list[float]]:
+    coordinates: list[list[float]] = []
+    index = latitude = longitude = 0
+    while index < len(encoded):
+        values = []
+        for _ in range(2):
+            result = shift = 0
+            while True:
+                if index >= len(encoded):
+                    raise HTTPException(502, "Google Routes returned an invalid route shape.")
+                value = ord(encoded[index]) - 63
+                index += 1
+                result |= (value & 0x1f) << shift
+                shift += 5
+                if value < 0x20:
+                    break
+            values.append(~(result >> 1) if result & 1 else result >> 1)
+        latitude += values[0]
+        longitude += values[1]
+        coordinates.append([longitude / 1e5, latitude / 1e5])
+    return coordinates
+
+
 @app.get("/api/map/config")
 def map_config():
-    return {"center": [12.9716, 77.5946], "zoom": 11,
-      "tile_url": os.getenv("MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
-      "attribution": "© OpenStreetMap contributors", "tile_provider": "OpenStreetMap"}
+    return {"center": [12.9716, 77.5946], "zoom": 11, "map_provider": "Google Maps"}
 
 
 @app.get("/api/geocode")
 def geocode(q: str = Query(min_length=3, max_length=120)):
-    if not GEOCODER:
-        raise HTTPException(503, "Address search is disabled. Configure NOMINATIM_BASE_URL after choosing a geocoding provider.")
-    key = q.strip().casefold()
-    cached = store.one("SELECT results_json FROM geocode_cache WHERE query_key=?", (key,))
-    if cached:
-        return {"query": q, "results": json.loads(cached["results_json"]), "source_type": "cached_geocoder_result"}
-    global LAST_GEOCODE_REQUEST
-    with GEOCODE_LOCK:
-        wait = 1.1 - (time.monotonic() - LAST_GEOCODE_REQUEST)
-        if wait > 0:
-            time.sleep(wait)
-        params = urllib.parse.urlencode({
-            "q": q + ", Bengaluru, India", "format": "jsonv2", "limit": 5,
-            "countrycodes": "in", "viewbox": "77.30,13.20,77.85,12.75", "bounded": 1,
-        })
-        data = external_json(GEOCODER + "/search?" + params, GEOCODER_AGENT)
-        LAST_GEOCODE_REQUEST = time.monotonic()
+    key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+    if not key:
+        raise HTTPException(503, "Google Maps services are not configured. Add GOOGLE_MAPS_API_KEY to the project .env file.")
+    params = urllib.parse.urlencode({
+        "address": q + ", Bengaluru, India", "region": "in",
+        "bounds": "12.75,77.30|13.20,77.85", "key": key,
+    })
+    data = external_json("https://maps.googleapis.com/maps/api/geocode/json?" + params, "FlowStateTrafficMonitor/1.0")
+    if data.get("status") == "ZERO_RESULTS":
+        return {"query": q, "results": [], "source_type": "google_geocoding"}
+    if data.get("status") != "OK":
+        raise HTTPException(502, "Google Maps could not find this address. Check the Geocoding API setup and try a more specific address.")
     results = [{
-        "display_name": item.get("display_name"), "latitude": float(item["lat"]),
-        "longitude": float(item["lon"]), "place_type": item.get("type"),
-        "source_type": "geocoder_result",
-    } for item in data]
-    with store.connect() as db:
-        db.execute("""INSERT INTO geocode_cache(query_key,results_json,fetched_at) VALUES(?,?,?)
-          ON CONFLICT(query_key) DO UPDATE SET results_json=excluded.results_json,fetched_at=excluded.fetched_at""",
-          (key,json.dumps(results),iso_now()))
-    return {"query": q, "results": results, "source_type": "geocoder_result", "attribution": "© OpenStreetMap contributors"}
+        "display_name": item.get("formatted_address"),
+        "latitude": float(item["geometry"]["location"]["lat"]),
+        "longitude": float(item["geometry"]["location"]["lng"]),
+        "place_type": (item.get("types") or [None])[0],
+        "source_type": "google_geocoding",
+    } for item in data.get("results", [])[:5]]
+    return {"query": q, "results": results, "source_type": "google_geocoding"}
 
 
 @app.post("/api/weather/fetch")
@@ -397,15 +419,23 @@ def route_candidates(
     profile: Literal["driving", "cycling", "walking"] = "driving",
     departure_at: datetime | None = None,
 ):
-    base = os.getenv("OSRM_BASE_URL", "https://router.project-osrm.org").rstrip("/")
-    coords = f"{origin_lon},{origin_lat};{destination_lon},{destination_lat}"
-    params = urllib.parse.urlencode({"alternatives": "true", "steps": "true", "geometries": "geojson", "overview": "full"})
-    data = external_json(f"{base}/route/v1/{profile}/{coords}?{params}")
-    if data.get("code") != "Ok":
-        raise HTTPException(404, "The routing provider did not find a route for those coordinates.")
     target_departure = departure_at or datetime.now(timezone.utc)
     if target_departure.tzinfo is None:
         raise HTTPException(422, "departure_at must include a timezone.")
+    google_mode = {"driving": "DRIVE", "cycling": "BICYCLE", "walking": "WALK"}[profile]
+    route_request = {
+        "origin": {"location": {"latLng": {"latitude": origin_lat, "longitude": origin_lon}}},
+        "destination": {"location": {"latLng": {"latitude": destination_lat, "longitude": destination_lon}}},
+        "travelMode": google_mode,
+        "computeAlternativeRoutes": profile == "driving",
+        "languageCode": "en-IN", "units": "METRIC",
+    }
+    if profile == "driving":
+        route_request["routingPreference"] = "TRAFFIC_AWARE"
+        route_request["departureTime"] = target_departure.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    data = google_post_json("https://routes.googleapis.com/directions/v2:computeRoutes", route_request)
+    if not data.get("routes"):
+        raise HTTPException(404, "Google Maps could not find a route for those locations.")
     weather_rows = store.rows("""SELECT * FROM weather_snapshots WHERE source_type='provider_forecast'
       AND forecast_for IS NOT NULL ORDER BY captured_at DESC LIMIT 2000""")
     closest_weather = None
@@ -433,7 +463,21 @@ def route_candidates(
     active = store.rows("""SELECT category,area,road,latitude,longitude,created_at,expires_at FROM incidents
       WHERE status='verified' AND latitude IS NOT NULL AND longitude IS NOT NULL
       AND (expires_at IS NULL OR expires_at>?)""", (iso_now(),))
-    routes = data.get("routes", [])
+    routes = []
+    for route in data.get("routes", []):
+        polyline = route.get("polyline", {}).get("encodedPolyline", "")
+        coordinates = decode_google_polyline(polyline)
+        duration_text = route.get("duration", "0s")
+        try:
+            duration_seconds = float(duration_text.removesuffix("s"))
+        except (TypeError, ValueError):
+            raise HTTPException(502, "Google Routes returned an invalid travel time.")
+        routes.append({
+            "duration": duration_seconds,
+            "distance": route.get("distanceMeters", 0),
+            "geometry": {"type": "LineString", "coordinates": coordinates},
+            "legs": [],
+        })
     shortest = min((route.get("duration", 0) for route in routes), default=1) or 1
     category_weight = {"accident":20,"road_blockage":25,"waterlogging":18,"construction":14,
       "diversion":18,"signal_failure":12,"breakdown":12,"heavy_traffic":14,"other":8}
@@ -452,16 +496,13 @@ def route_candidates(
           "route_index":index,"distance_m":route.get("distance"),"baseline_duration_s":route.get("duration"),
           "geometry":route.get("geometry"),"legs":route.get("legs"),
           "nearby_verified_incidents":nearby,"weather_context":closest_weather,"weather_penalty":weather_penalty,"risk_score":round(min(100,detour+incident_penalty+weather_penalty),1),
-          "source_type":"map_route_estimate",
+          "source_type":"google_maps_route",
         })
     scored.sort(key=lambda item:(item["risk_score"],item["baseline_duration_s"] or float("inf")))
     route_id = str(uuid.uuid4())
-    scoring = "Unvalidated heuristic: relative detour penalty plus category-weighted verified incidents within 200 m. No live traffic is included."
-    with store.connect() as db:
-        db.execute("""INSERT INTO route_assessments(route_id,issue_time,provider,source_type,scoring_method,route_results_json)
-          VALUES(?,?,?,?,?,?)""",(route_id,iso_now(),"OSRM","map_route_estimate",scoring,json.dumps(scored)))
-    return {"route_id":route_id,"provider":"OSRM","routes":scored,"scoring_method":scoring,
-      "traffic_data_coverage":"not_assessed","weather_status":"provider_forecast_used" if closest_weather else "unavailable","notice":"Baseline route duration is from the routing graph, not live traffic. Risk score is an unvalidated heuristic."}
+    scoring = "Unvalidated heuristic: Google route alternatives, category-weighted verified incidents within 200 m, and available weather context."
+    return {"route_id":route_id,"provider":"Google Routes API","routes":scored,"scoring_method":scoring,
+      "traffic_data_coverage":"Google traffic-aware routing when available","weather_status":"provider_forecast_used" if closest_weather else "unavailable","notice":"Driving time uses Google's traffic-aware route estimate when available. The project risk score is an unvalidated research heuristic."}
 
 
 @app.get("/api/health")

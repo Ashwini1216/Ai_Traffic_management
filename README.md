@@ -4,7 +4,7 @@ FlowState is a student research prototype for collaborative traffic monitoring i
 
 The project combines a map-based web interface, a Python API, historical traffic records, and experimental prediction tools. It is intended for learning and demonstration; it is not an official traffic service.
 
-> **Please read:** Route durations are estimates from the road routing graph and are not live traffic travel times. Traffic predictions and video vehicle counts are experimental and are not safety advice. Generated synthetic data is simulated; it is not real sensor data or evaluation ground truth.
+> **Please read:** Google driving times are traffic-aware estimates when the Google Routes service returns traffic data; they are not guaranteed live conditions. The project's incident and weather impact score, traffic predictions, and video vehicle counts are experimental and are not safety advice. Generated synthetic data is simulated; it is not real sensor data or evaluation ground truth.
 
 ## What the website can do
 
@@ -26,13 +26,14 @@ Authority accounts cannot be created through commuter sign-up. A project operato
 
 ## Technology
 
-- **Frontend:** React 18, Vite 8, Leaflet 1.9, Lucide React
+- **Frontend:** React 18, Vite 8, Google Maps JavaScript API, Lucide React
 - **Backend:** Python 3.12, FastAPI, Uvicorn
 - **Database:** SQLAlchemy 2, SQLite for simple local use, optional PostgreSQL with Psycopg 2
 - **Data and models:** NumPy, pandas, scikit-learn, TensorFlow/Keras, Joblib
 - **Authentication:** JWT with `python-jose`; password hashing with Passlib
 - **Optional video analysis:** Ultralytics YOLOv8, OpenCV, and PyTorch
-- **Map services:** OpenStreetMap tiles, Nominatim place search, OSRM route alternatives
+- **Map services:** Google Maps JavaScript API, Google Geocoding API, Google Routes API
+- **Weather context:** Open-Meteo
 
 ## Run FlowState on your computer
 
@@ -45,6 +46,7 @@ Install:
 - Python 3.12
 - Node.js 20.19+ or 22.12+ (npm is included with Node.js)
 - Git, if you are cloning the project from GitHub
+- A Google Cloud project with billing enabled and Google Maps Platform APIs enabled (see below)
 
 Then open PowerShell or the VS Code terminal.
 
@@ -84,6 +86,10 @@ Open `.env` in a text editor and change the placeholder values:
 - Set `JWT_SECRET_KEY` to a long, random secret.
 - Set `AUTHORITY_USERNAME` and `AUTHORITY_PASSWORD` to credentials chosen by the local project operator.
 - For the easiest local database setup, set `DATABASE_URL=` (leave the value empty). The app then uses a local SQLite database at `data\traffic_monitor.db`.
+- Set `GOOGLE_MAPS_API_KEY` to a server key used by address search and route requests.
+- Set `VITE_GOOGLE_MAPS_API_KEY` to a separate browser key used to display the map. Vite reads this project-root `.env` file.
+
+In Google Cloud Console, enable **Maps JavaScript API**, **Geocoding API**, and **Routes API** for a project with billing configured. Restrict the browser key to the Maps JavaScript API and your allowed website referrers (for local development, `http://localhost:5173/*` and `http://127.0.0.1:5173/*`). Restrict the server key to Geocoding API and Routes API; for a deployed backend, also restrict it to the server's IP address where practical. The browser key is visible to website visitors by design, so its referrer restriction is important. Never commit either real key. Set API quotas and a budget alert before sharing the site; Google Maps Platform usage is billed by service and may incur charges beyond the applicable no-charge usage caps. See Google's [pricing](https://developers.google.com/maps/billing-and-pricing/pricing) and [API key security guidance](https://developers.google.com/maps/api-security-best-practices).
 
 PostgreSQL is optional. To use it instead, create/configure a PostgreSQL database and set `DATABASE_URL` to its connection string. Do not use the example connection string unchanged.
 
@@ -151,7 +157,7 @@ To let people use FlowState over the internet, the frontend and backend must be 
 
 ## Known limitations
 
-- Route times are based on OSRM's route graph, not a live traffic speed feed.
+- Google Maps, Geocoding, and Routes features require valid restricted API keys and an enabled billing account. Google driving durations may use traffic-aware estimates; they are still estimates and availability depends on the request and provider.
 - Historical data does not provide road geometry for drawing verified live traffic segments.
 - Weather context depends on external provider availability and should be treated as contextual information.
 - Traffic predictions are experimental; their reported scores do not prove reliable live performance.
