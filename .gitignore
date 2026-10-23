@@ -15,6 +15,19 @@ data/*.zip
 data/*.csv
 data/*_manifest.json
 data/cctv_footage/
+data/logs/
+# Trained model versions (models/<version>/) and older single-file artifacts.
+models/*/
 models/*.keras
 models/*.joblib
 models/*.json
+# YOLO weights are downloaded on first video analysis.
+*.pt
+# Test run output.
+.pytest_cache/
+tests/browser/test-results/
+tests/browser/playwright-report/
+# Operating-system files (macOS, Windows).
+.DS_Store
+Thumbs.db
+desktop.ini

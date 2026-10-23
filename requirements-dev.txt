@@ -1,0 +1,4 @@
+# Test tools, on top of the app's own packages. The app itself does not need these.
+-r requirements.txt
+pytest>=8.0
+httpx>=0.27

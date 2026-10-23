@@ -1,346 +1,538 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Activity, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Camera, Video,
-  BarChart3, Bell, Check, ChevronDown, Clock3, Cloud, CloudRain,
-  Construction, Gauge, LayoutDashboard, LocateFixed, Map as MapIcon,
-  MapPin, Menu, Navigation, Plus, RefreshCw, Route, Search, ShieldCheck,
-  SlidersHorizontal, Sparkles, TrendingUp, Users, Wind, X,
+  Activity, AlertTriangle, ArrowRight, Bell, Camera, Check, ChevronDown, Clock3, Construction, Cpu, Database,
+  Gauge, Inbox, Layers, LayoutDashboard, LocateFixed, Map as MapIcon, MapPin, Menu, Navigation, Plus, Radio,
+  RefreshCw, Route, Search, ShieldCheck, SlidersHorizontal, TrendingUp, UserCheck, UserPlus, Users, Video, X,
 } from 'lucide-react';
+import { API, BLOCKS, CATEGORY_LABELS, CITIZEN_CATEGORIES, api, dateTime, localISODate, longDate, n, readJson, writeJson } from './lib.js';
+import { MapSetupNotice, infoContent, useGoogleMap } from './maps.jsx';
+import { LEVELS, LevelBadge, level } from './viz.jsx';
+import { AccountPage, NotificationsPage, PlanTrips, RoadForecast, StartJourney } from './commuter.jsx';
+import { AccessDesk, AlertsDesk, CoverageDesk, DataDesk, DemandDesk, ModelsDesk, NoticeDesk, ZoneMonitor } from './authority.jsx';
 
-const API = import.meta.env.VITE_API_BASE || '';
-const GOOGLE_MAPS_BROWSER_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
-let googleMapsLoadPromise;
-
-function loadGoogleMaps() {
-  if (!GOOGLE_MAPS_BROWSER_KEY) return Promise.reject(new Error('Add VITE_GOOGLE_MAPS_API_KEY to the project .env file, then restart the website.'));
-  if (window.google?.maps?.importLibrary) return Promise.resolve(window.google.maps);
-  if (!googleMapsLoadPromise) {
-    googleMapsLoadPromise = new Promise((resolve, reject) => {
-      const callbackName = '__flowstateGoogleMapsLoaded';
-      window[callbackName] = () => { delete window[callbackName]; resolve(window.google.maps); };
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(GOOGLE_MAPS_BROWSER_KEY)}&v=weekly&loading=async&callback=${callbackName}`;
-      script.async = true;
-      script.onerror = () => { delete window[callbackName]; googleMapsLoadPromise = null; reject(new Error('Google Maps failed to load. Check the browser key and Maps JavaScript API settings.')); };
-      document.head.appendChild(script);
-    });
-  }
-  return googleMapsLoadPromise;
-}
-
-function useGoogleMap(containerRef, zoom = 11) {
-  const mapRef = useRef(null);
-  const [map, setMap] = useState(null);
-  const [mapError, setMapError] = useState('');
-  useEffect(() => {
-    let active = true;
-    loadGoogleMaps().then(async maps => {
-      const { Map } = await maps.importLibrary('maps');
-      await maps.importLibrary('marker');
-      if (!active || !containerRef.current) return;
-      const instance = new Map(containerRef.current, {
-        center: { lat: 12.9716, lng: 77.5946 }, zoom,
-        mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
-        clickableIcons: false, gestureHandling: 'greedy',
-      });
-      mapRef.current = instance;
-      setMap(instance);
-    }).catch(error => { if (active) setMapError(error.message || 'Google Maps could not be loaded.'); });
-    return () => { active = false; mapRef.current = null; };
-  }, []);
-  return { map, mapRef, mapError };
-}
-
-function MapSetupNotice({ message }) {
-  return message ? <div className="google-map-setup-note" role="status"><b>Map setup needed</b><span>{message}</span></div> : null;
-}
 const USER_NAV = [
-  { id: 'user-home', label: 'My commute', icon: LayoutDashboard },
-  { id: 'journeys', label: 'Start a journey', icon: Navigation },
-  { id: 'plan', label: 'Plan a trip', icon: Route },
-  { id: 'incidents', label: 'Report an incident', icon: AlertTriangle },
-  { id: 'predict', label: 'Location prediction', icon: TrendingUp },
+  { section: 'MY TRAVEL', items: [
+    { id: 'user-home', label: 'My commute', icon: LayoutDashboard },
+    { id: 'journeys', label: 'Start a journey', icon: Navigation },
+    { id: 'plan', label: 'Plan a trip', icon: Route },
+    { id: 'forecast-road', label: 'Road forecast', icon: TrendingUp },
+    { id: 'incidents', label: 'Report an incident', icon: AlertTriangle },
+  ] },
+  { section: 'ACCOUNT', items: [
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'account', label: 'Account', icon: UserPlus },
+  ] },
 ];
 const AUTH_NAV = [
-  { id: 'authority-home', label: 'Operations overview', icon: LayoutDashboard },
-  { id: 'authority-map', label: 'Incident map', icon: MapIcon },
-  { id: 'cameras', label: 'CCTV review', icon: Camera },
-  { id: 'broadcasts', label: 'Broadcast alerts', icon: Bell },
+  { section: 'OPERATIONS', items: [
+    { id: 'authority-home', label: 'Operations overview', icon: LayoutDashboard },
+    { id: 'zones', label: 'Zone monitor', icon: Layers },
+    { id: 'authority-map', label: 'Incident map', icon: MapIcon },
+    { id: 'notices', label: 'Official notices', icon: Radio },
+    { id: 'alerts', label: 'Alerts', icon: AlertTriangle },
+    { id: 'broadcasts', label: 'Broadcast alerts', icon: Bell },
+  ] },
+  { section: 'DATA AND MODELS', items: [
+    { id: 'demand', label: 'Planned demand', icon: Users },
+    { id: 'coverage', label: 'Data coverage', icon: Database },
+    { id: 'data', label: 'Observations & jobs', icon: Inbox },
+    { id: 'models', label: 'Models', icon: Cpu },
+    { id: 'cameras', label: 'CCTV review', icon: Camera },
+    { id: 'overview', label: 'Traffic data', icon: Gauge },
+  ] },
+  { section: 'ADMINISTRATION', items: [
+    { id: 'access', label: 'Access requests', icon: UserCheck },
+    { id: 'map', label: 'Place search', icon: Search },
+  ] },
 ];
-const COLORS = { High: '#ef6b5c', Medium: '#f4ad51', Low: '#38a989', Unknown: '#a7b0bd' };
-const blocks = ['Midnight', 'Morning', 'Daytime', 'Noon', 'Evening', 'Night'];
+const EMPTY_DATA = { summary: null, coverage: [], segments: [], incidents: [], cameras: [], models: [], synthetic: null, broadcasts: [], footage: [], alerts: [], mapConfig: null };
 const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
-
-async function api(path, options = {}) {
-  const token = typeof window !== 'undefined' ? sessionStorage.getItem('flowstateToken') : null;
-  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
-  const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers: { ...(options.body && !isForm ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers },
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail?.message || body.detail || body.message || `Request failed (${response.status})`);
-  return body;
-}
-const n = value => Number(value || 0).toLocaleString('en-IN');
-const shortDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—';
 
 function App() {
   const [portal, setPortal] = useState(() => window.location.pathname === '/authority' ? 'authority' : window.location.pathname === '/user' ? 'user' : 'landing');
-  const [page, setPage] = useState(() => window.location.pathname === '/authority' ? 'authority-home' : window.location.pathname === '/user' ? 'user-home' : 'user-home');
-  const [data, setData] = useState({ summary: null, coverage: [], incidents: [], cameras: [], model: null, lstm: null, weather: [], synthetic: null, broadcasts: [], footage: [] });
+  const [page, setPage] = useState(() => window.location.pathname === '/authority' ? 'authority-home' : 'user-home');
+  const [data, setData] = useState(EMPTY_DATA);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
-  const [apiOnline,setApiOnline]=useState(null);
+  const [apiOnline, setApiOnline] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [user, setUser] = useState(null);
-  const [authModal, setAuthModal] = useState(false);
+  const [unread, setUnread] = useState(0);
 
   async function refresh() {
     setBusy(true); setError('');
     try {
-      const isAuthority=user?.role==='authority';
-      const [coverage, incidents, cameras, broadcasts, footage] = await Promise.all([
-        api('/api/coverage'),
-        isAuthority ? api('/api/incidents?limit=100') : Promise.resolve({incidents:[]}),
-        isAuthority ? api('/api/cameras') : Promise.resolve({cameras:[]}),
+      const isAuthority = user?.role === 'authority';
+      const optional = (enabled, path, fallback = null) => enabled ? api(path).catch(() => fallback) : Promise.resolve(fallback);
+      const [coverage, segments, mapConfig, broadcasts, incidents, cameras, footage, summary, models, synthetic, alerts] = await Promise.all([
+        api('/api/coverage'), api('/api/segments'), api('/api/map/config').catch(() => null),
         api('/api/broadcasts').catch(() => ({ broadcasts: [] })),
-        isAuthority ? api('/api/camera-footage').catch(() => ({ footage: [] })) : Promise.resolve({ footage: [] }),
+        optional(isAuthority, '/api/incidents?limit=200', { incidents: [] }), optional(isAuthority, '/api/cameras', { cameras: [] }),
+        optional(isAuthority, '/api/camera-footage', { footage: [] }), optional(isAuthority, '/api/summary'),
+        optional(isAuthority, '/api/models', { models: [] }), optional(isAuthority, '/api/synthetic/summary'),
+        optional(isAuthority, '/api/alerts?status=active', { alerts: [] }),
       ]);
-      setData(previous=>({ ...previous, coverage: coverage.segments || [], incidents: incidents.incidents || [], cameras: cameras.cameras || [], broadcasts: broadcasts.broadcasts || [], footage: footage.footage || [] }));
+      setData({ coverage: coverage.segments || [], segments: segments.segments || [], mapConfig, broadcasts: broadcasts.broadcasts || [],
+        incidents: incidents.incidents || [], cameras: cameras.cameras || [], footage: footage.footage || [], summary,
+        models: models.models || [], synthetic, alerts: alerts.alerts || [] });
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   }
   useEffect(() => { refresh(); }, [user?.role]);
-  useEffect(() => { if(sessionStorage.getItem('flowstateToken')) api('/api/auth/me').then(setUser).catch(()=>{sessionStorage.removeItem('flowstateToken');}); }, []);
-  useEffect(()=>{let active=true;const check=()=>api('/api/health').then(()=>{if(active)setApiOnline(true);}).catch(()=>{if(active)setApiOnline(false);});check();const timer=setInterval(check,30000);return()=>{active=false;clearInterval(timer);};},[]);
-  useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 3600); return () => clearTimeout(id); }, [toast]);
+  useEffect(() => { if (sessionStorage.getItem('flowstateToken')) api('/api/auth/me').then(setUser).catch(() => { sessionStorage.removeItem('flowstateToken'); }); }, []);
+  useEffect(() => {
+    let active = true;
+    const check = () => api('/api/health').then(() => { if (active) setApiOnline(true); }).catch(() => { if (active) setApiOnline(false); });
+    check();
+    const timer = setInterval(check, 30000);
+    return () => { active = false; clearInterval(timer); };
+  }, []);
+  useEffect(() => {
+    if (user?.role !== 'citizen') return undefined;
+    const poll = () => api('/api/notifications').then(body => setUnread(body.unread)).catch(() => {});
+    poll();
+    const timer = setInterval(poll, 60000);
+    return () => clearInterval(timer);
+  }, [user?.role]);
+  useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
 
+  function signOut() { sessionStorage.removeItem('flowstateToken'); setUser(null); history.pushState({}, '', '/'); setPortal('landing'); setPage('user-home'); }
   const nav = portal === 'authority' ? AUTH_NAV : USER_NAV;
-  const title = nav.find(item => item.id === page)?.label || (portal === 'authority' ? 'Operations overview' : 'My commute');
-  if (portal === 'landing') return <PortalLanding onChoose={mode=>{history.pushState({},'',mode==='authority'?'/authority':'/user');setPortal(mode);setPage(mode==='authority'?'authority-home':'user-home');}}/>;
-  if (portal === 'authority' && user?.role !== 'authority') return <PortalLogin role="authority" onUser={setUser} onBack={()=>{history.pushState({},'','/');setPortal('landing');}}/>;
-  if (portal === 'user' && user?.role !== 'citizen') return <PortalLogin role="citizen" onUser={setUser} onBack={()=>{sessionStorage.removeItem('flowstateToken');setUser(null);history.pushState({},'','/');setPortal('landing');}}/>;
+  const title = nav.flatMap(group => group.items).find(item => item.id === page)?.label || (portal === 'authority' ? 'Operations overview' : 'My commute');
+  if (portal === 'landing') return <PortalLanding onChoose={mode => { history.pushState({}, '', mode === 'authority' ? '/authority' : '/user'); setPortal(mode); setPage(mode === 'authority' ? 'authority-home' : 'user-home'); }} />;
+  if (portal === 'authority' && user?.role !== 'authority') return <PortalLogin role="authority" onUser={setUser} onBack={() => { history.pushState({}, '', '/'); setPortal('landing'); }} />;
+  if (portal === 'user' && user?.role !== 'citizen') return <PortalLogin role="citizen" onUser={setUser} onBack={signOut} />;
+  const places = data.segments.filter(s => s.latitude != null).map(s => ({ id: s.segment_id, label: `${s.road}, ${s.area}`, latitude: s.latitude, longitude: s.longitude, area: s.area, road: s.road }));
+  const pins = readJson('flowstateJourneyPoints', {});
+  const googleRouting = Boolean(data.mapConfig?.google_routing_configured);
+  const badge = id => {
+    if (portal === 'authority' && id === 'authority-map') return data.incidents.filter(x => x.status === 'reported').length;
+    if (portal === 'authority' && id === 'alerts') return data.alerts.filter(a => a.status === 'open').length;
+    if (portal === 'user' && id === 'notifications') return unread;
+    return 0;
+  };
+  const commuterPages = {
+    journeys: <StartJourney setToast={setToast} places={places} pins={pins} googleRouting={googleRouting} />,
+    plan: <PlanTrips setToast={setToast} places={places} pins={pins} />,
+    'forecast-road': <RoadForecast segments={data.segments} />,
+    incidents: <Incidents setToast={setToast} />,
+    notifications: <NotificationsPage onChange={setUnread} />,
+    account: <AccountPage user={user} setToast={setToast} />,
+  };
   return <div className="app-shell">
     <aside className={`sidebar ${mobileNav ? 'sidebar-open' : ''}`}>
-      <div className="brand"><span className="brand-mark"><Activity size={21}/></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span><button className="mobile-close icon-button" onClick={() => setMobileNav(false)} aria-label="Close menu"><X size={18}/></button></div>
-      <div className="workspace-label">WORKSPACE</div>
-      <div className="city-picker"><span className="city-icon"><MapPin size={16}/></span><span><b>Bengaluru</b><small>Karnataka, India</small></span><ChevronDown size={15}/></div>
-      <div className="nav-label">MONITORING</div>
-      <nav>{nav.map(item => <button key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => { setPage(item.id); setMobileNav(false); }}><item.icon size={18}/><span>{item.label}</span>{portal==='authority'&&item.id==='authority-map'&&data.incidents.filter(x=>x.status==='reported').length>0&&<i className="nav-count">{data.incidents.filter(x=>x.status==='reported').length}</i>}</button>)}</nav>
-      <div className="sidebar-spacer"/>
-      <div className="coverage-note"><span className="coverage-signal"/><div><b>{portal==='authority'?'Authority console':'FlowState live help'}</b><p>{portal==='authority'?'Review first, then publish alerts.':'Predictions are estimates. Report only what you observe.'}</p></div></div>
-      <div className="profile"><div className="avatar">{portal==='authority'?'AO':'FS'}</div><div><b>{user?.username||'Public access'}</b><small>{portal==='authority'?'Authorized operations':'Bengaluru commuter'}</small></div><button className="profile-exit" onClick={()=>{sessionStorage.removeItem('flowstateToken');setUser(null);history.pushState({},'','/');setPortal('landing');}} aria-label="Sign out or switch portal"><SlidersHorizontal size={17}/></button></div>
+      <div className="brand"><span className="brand-mark"><Activity size={21} /></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span><button className="mobile-close icon-button" onClick={() => setMobileNav(false)} aria-label="Close menu"><X size={18} /></button></div>
+      <div className="city-picker"><span className="city-icon"><MapPin size={16} /></span><span><b>Bengaluru</b><small>Karnataka, India</small></span><ChevronDown size={15} /></div>
+      <div className="sidebar-scroll">{nav.map(group => <div className="nav-section" key={group.section}>
+        <div className="nav-label">{group.section}</div>
+        <nav>{group.items.map(item => <button key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => { setPage(item.id); setMobileNav(false); }}>
+          <item.icon size={18} /><span>{item.label}</span>{badge(item.id) > 0 && <i className="nav-count">{badge(item.id)}</i>}</button>)}</nav>
+      </div>)}</div>
+      <div className="coverage-note"><span className="coverage-signal" /><div><b>{portal === 'authority' ? 'Authority console' : 'FlowState commuter'}</b><p>{portal === 'authority' ? 'Review first, then publish alerts.' : 'Forecasts are estimates. Report only what you observe.'}</p></div></div>
+      <div className="profile"><div className="avatar">{portal === 'authority' ? 'AO' : 'FS'}</div><div><b>{user?.username || 'Public access'}</b><small>{portal === 'authority' ? 'Authorized operations' : 'Bengaluru commuter'}</small></div><button className="profile-exit" onClick={signOut} aria-label="Sign out or switch portal"><SlidersHorizontal size={17} /></button></div>
     </aside>
-    {mobileNav && <button className="scrim" onClick={() => setMobileNav(false)} aria-label="Close navigation"/>}
+    {mobileNav && <button className="scrim" onClick={() => setMobileNav(false)} aria-label="Close navigation" />}
     <main className="main-area">
-      <header className="topbar"><div className="topbar-left"><button className="mobile-menu icon-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={20}/></button><span className="breadcrumb">{portal==='authority'?'Authority console':'Commuter portal'} <span>/</span> {title}</span></div><div className="top-actions"><span className={`api-state ${apiOnline===false?'api-state-offline':''}`}><i/>{apiOnline===null?'Checking connection…':apiOnline?'Connected':'Offline'}</span><button className="refresh-button" onClick={refresh} disabled={busy}><RefreshCw size={15} className={busy ? 'spin' : ''}/><span>Refresh</span></button><button className="account-button" onClick={()=>{sessionStorage.removeItem('flowstateToken');setUser(null);history.pushState({},'','/');setPortal('landing');setPage('user-home');}}><span className="account-dot">{user?.username?.slice(0,1).toUpperCase()}</span><span className="account-name">{user?.username}</span><small>Sign out</small></button></div></header>
+      <header className="topbar"><div className="topbar-left"><button className="mobile-menu icon-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={20} /></button><span className="breadcrumb"><span className="crumb-root">{portal === 'authority' ? 'Authority console' : 'Commuter portal'}</span><span className="crumb-sep">/</span>{title}</span></div>
+        <div className="top-actions"><span className={`api-state ${apiOnline === false ? 'api-state-offline' : ''}`}><i />{apiOnline === null ? 'Checking connection…' : apiOnline ? 'Connected' : 'Offline'}</span>
+          <button className="refresh-button" onClick={refresh} disabled={busy}><RefreshCw size={15} className={busy ? 'spin' : ''} /><span>Refresh</span></button>
+          <button className="account-button" onClick={signOut}><span className="account-dot">{user?.username?.slice(0, 1).toUpperCase()}</span><span className="account-name">{user?.username}</span><small>Sign out</small></button></div></header>
       <div className="page-wrap">
-        {error && <div className="alert-banner"><AlertTriangle size={18}/><span><b>Could not load project data.</b> {error} Start the FastAPI server and refresh.</span><button onClick={() => setError('')}><X size={16}/></button></div>}
-        {portal==='user'&&page!=='user-home'?<div className="commuter-workspace"><CommuterWorkspaceMap/><section className="commuter-workspace-panel">{page==='journeys'&&<StartJourney setToast={setToast}/>}{page==='plan'&&<Journeys setToast={setToast}/>}{page==='incidents'&&<Incidents data={data} refresh={refresh} setToast={setToast} user={user}/>}{page==='predict'&&<LocationPrediction data={data} setToast={setToast}/>}</section></div>:<>
-        {page === 'user-home' && <UserHome data={data} navigate={setPage}/>}
-        {page === 'authority-home' && <AuthorityHome data={data} navigate={setPage}/>}
-        {page === 'authority-map' && <AuthorityIncidentMap data={data} refresh={refresh} setToast={setToast}/>}
-        {page === 'broadcasts' && <Broadcasts data={data} refresh={refresh} setToast={setToast}/>}
-        {page === 'map' && <TrafficMap data={data} setToast={setToast}/>}
-        {page === 'predict' && <LocationPrediction data={data} setToast={setToast}/>}
-        {page === 'cameras' && <CameraScreen data={data} refresh={refresh} setToast={setToast} user={user}/>}
-        {page === 'incidents' && <Incidents data={data} refresh={refresh} setToast={setToast} user={user} />}
-        {page === 'journeys' && <StartJourney setToast={setToast}/>}
-        {page === 'plan' && <Journeys setToast={setToast}/>}
-        </>}
+        {error && <div className="alert-banner"><AlertTriangle size={18} /><span><b>Could not load project data.</b> {error} Start the FastAPI server and refresh.</span><button onClick={() => setError('')}><X size={16} /></button></div>}
+        {portal === 'user' && page !== 'user-home'
+          ? <div className="commuter-workspace"><CommuterWorkspaceMap /><section className="commuter-workspace-panel">{commuterPages[page]}</section></div>
+          : <>
+            {page === 'user-home' && <UserHome data={data} navigate={setPage} />}
+            {page === 'authority-home' && <AuthorityHome data={data} navigate={setPage} />}
+            {page === 'zones' && <ZoneMonitor />}
+            {page === 'authority-map' && <AuthorityIncidentMap data={data} refresh={refresh} setToast={setToast} />}
+            {page === 'notices' && <NoticeDesk setToast={setToast} places={places} refresh={refresh} />}
+            {page === 'alerts' && <AlertsDesk setToast={setToast} />}
+            {page === 'broadcasts' && <Broadcasts data={data} refresh={refresh} setToast={setToast} />}
+            {page === 'demand' && <DemandDesk />}
+            {page === 'coverage' && <CoverageDesk setToast={setToast} googleRouting={googleRouting} />}
+            {page === 'data' && <DataDesk setToast={setToast} segments={data.segments} refresh={refresh} />}
+            {page === 'models' && <ModelsDesk setToast={setToast} segments={data.segments} />}
+            {page === 'cameras' && <CameraScreen data={data} refresh={refresh} setToast={setToast} user={user} />}
+            {page === 'overview' && <Overview data={data} navigate={setPage} />}
+            {page === 'access' && <AccessDesk setToast={setToast} user={user} />}
+            {page === 'map' && <TrafficMap data={data} />}
+          </>}
         <footer className="page-footer"><span>FlowState · Final year research project</span><span>Historical dataset · Bengaluru</span></footer>
       </div>
     </main>
-    {toast && <div className="toast"><Check size={17}/>{toast}</div>}
-    {authModal && <AuthModal close={()=>setAuthModal(false)} onAuth={account=>{setUser(account.user);setAuthModal(false);setToast(`Signed in as ${account.user.username}.`);}}/>}
+    {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
   </div>;
 }
 
-function PortalLanding({onChoose}) {
-  return <main className="portal-landing"><nav className="landing-nav"><a className="brand landing-brand" href="/"><span className="brand-mark"><Activity size={21}/></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span></a><span className="landing-location"><MapPin size={15}/> Bengaluru, India</span></nav><section className="landing-hero"><div className="landing-copy"><div className="eyebrow">A CLEARER WAY THROUGH THE CITY</div><h1>Move with a little more <em>confidence.</em></h1><p>Plan your route, share road incidents, and see research based traffic estimates for Bengaluru.</p><div className="landing-actions"><button className="button button-primary" onClick={()=>onChoose('user')}>Continue as a commuter <ArrowRight size={16}/></button><button className="authority-link" onClick={()=>onChoose('authority')}><ShieldCheck size={16}/> Authority sign in</button></div><div className="landing-note"><span className="coverage-signal"/> Historic estimates and community reports are clearly labeled.</div></div><div className="landing-art"><div className="art-orbit orbit-one"/><div className="art-orbit orbit-two"/><div className="art-center"><Activity size={40}/></div><span className="art-pin pin-one"><MapPin size={17}/></span><span className="art-pin pin-two"><Navigation size={17}/></span><span className="art-pin pin-three"><AlertTriangle size={17}/></span><div className="art-card"><span className="coverage-signal"/><span><b>City pulse</b><small>Traffic insight · Bengaluru</small></span><TrendingUp size={19}/></div></div></section><section className="landing-features"><div><Route/><b>Plan your trip</b><small>Find a route and baseline duration.</small></div><div><AlertTriangle/><b>Report an incident</b><small>Help authorities notice road issues.</small></div><div><TrendingUp/><b>Check a location</b><small>See an estimate from past records.</small></div></section><footer className="landing-footer">FLOWSTATE · COLLABORATIVE TRAFFIC MONITORING <span>Research prototype · estimates are not live sensor readings</span></footer></main>;
+function PortalLanding({ onChoose }) {
+  return <main className="portal-landing"><nav className="landing-nav"><a className="brand landing-brand" href="/"><span className="brand-mark"><Activity size={21} /></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span></a><span className="landing-location"><MapPin size={15} /> Bengaluru, India</span></nav>
+    <section className="landing-hero"><div className="landing-copy"><div className="eyebrow">A CLEARER WAY THROUGH THE CITY</div><h1>Move with a little more <em>confidence.</em></h1><p>Plan your route, share road incidents, and see research-based congestion forecasts for Bengaluru.</p>
+      <div className="landing-actions"><button className="button button-primary" onClick={() => onChoose('user')}>Continue as a commuter <ArrowRight size={16} /></button><button className="authority-link" onClick={() => onChoose('authority')}><ShieldCheck size={16} /> Authority sign in</button></div>
+      <div className="landing-note"><span className="coverage-signal" /> Forecasts, community reports and official notices are clearly labelled.</div></div>
+      <div className="landing-art"><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-center"><Activity size={40} /></div><span className="art-pin pin-one"><MapPin size={17} /></span><span className="art-pin pin-two"><Navigation size={17} /></span><span className="art-pin pin-three"><AlertTriangle size={17} /></span><div className="art-card"><span className="coverage-signal" /><span><b>City pulse</b><small>Traffic insight · Bengaluru</small></span><TrendingUp size={19} /></div></div></section>
+    <section className="landing-features"><div><Route /><b>Plan your trip</b><small>Compare routes and get alerts if things change.</small></div><div><AlertTriangle /><b>Report an incident</b><small>Help authorities notice road issues.</small></div><div><TrendingUp /><b>Check a road</b><small>See a forecast with its method and confidence.</small></div></section>
+    <footer className="landing-footer">FLOWSTATE · COLLABORATIVE TRAFFIC MONITORING <span>Research prototype · estimates are not live sensor readings</span></footer></main>;
 }
 
-function PortalLogin({role,onUser,onBack}) {
-  const authority=role==='authority';const [mode,setMode]=useState('login'),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[email,setEmail]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  async function submit(e){e.preventDefault();setError('');setBusy(true);try{const result=await api(mode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',body:JSON.stringify({username,password,...(mode==='register'&&email?{email}:{})})});if(result.user?.role!==(authority?'authority':'citizen'))throw new Error(authority?'This account is not an authority account.':'Use the authority sign-in page for an authority account.');sessionStorage.setItem('flowstateToken',result.access_token);onUser(result.user);}catch(err){sessionStorage.removeItem('flowstateToken');setError(err.message==='Failed to fetch'?'Could not connect. Check that the project is running, then try again.':err.message);}finally{setBusy(false);}}
-  return <main className="portal-login"><button className="login-back" onClick={onBack}><ArrowRight size={15}/> Back to portal selection</button><section className="login-card"><a className="brand landing-brand" href="/"><span className="brand-mark"><Activity size={21}/></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span></a><span className={`login-emblem ${authority?'authority-emblem':''}`}>{authority?<ShieldCheck size={22}/>:<Navigation size={22}/>}</span><div className="eyebrow">{authority?'RESTRICTED AUTHORITY ACCESS':'COMMUTER PORTAL'}</div><h1>{authority?'Authority sign in':mode==='register'?'Create your commuter account':'Welcome back'}</h1><p>{authority?'Enter the authority credentials supplied by the project administrator.':'Sign in to use trip planning and community reporting.'}</p><form onSubmit={submit}><label>Username<input autoComplete="username" required minLength="3" value={username} onChange={e=>setUsername(e.target.value)} placeholder={authority?'Authority username':'Your username'}/></label>{mode==='register'&&!authority&&<label>Email <small>optional</small><input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>}<label>Password<input type="password" autoComplete={mode==='login'?'current-password':'new-password'} minLength={mode==='register'?10:1} required value={password} onChange={e=>setPassword(e.target.value)} placeholder={mode==='register'?'At least 10 characters':'Your password'}/></label>{error&&<div className="inline-error">{error}</div>}<button className="button button-primary auth-submit" disabled={busy}>{busy?'Checking…':mode==='register'?'Create commuter account':'Sign in securely'}</button></form>{!authority&&<button className="auth-switch" onClick={()=>{setMode(mode==='login'?'register':'login');setError('');}}>{mode==='login'?"New here? Create an account":"Already have an account? Sign in"}</button>}<div className="login-foot"><ShieldCheck size={14}/>{authority?'Authority accounts are provisioned by the administrator.':'Your personal trip details remain private.'}</div></section><span className="login-watermark">FLOWSTATE · BENGALURU</span></main>;
-}
-
-function UserHome({data,navigate}) {
-  const readPins=()=>{try{return JSON.parse(sessionStorage.getItem('flowstateJourneyPoints')||'{}');}catch{return {};}};
-  const [pins,setPins]=useState(readPins),[pickMode,setPickMode]=useState('');
-  function choosePoint(point){const next={...pins,[pickMode]:{...point,label:`Map point (${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)})`}};setPins(next);sessionStorage.setItem('flowstateJourneyPoints',JSON.stringify(next));setPickMode('');}
-  const options=[['journeys',Navigation,'Start a journey','Compare routes and check current weather.'],['plan',Route,'Plan a trip','Save a future journey privately.'],['incidents',AlertTriangle,'Report an incident','Share a road issue with the authority.'],['predict',TrendingUp,'Traffic by location','See an estimate based on past records.']];
-  return <><PageHeading eyebrow="YOUR BENGALURU COMMUTE" title="Where are you headed?" subtitle="Pick an exact point on the map or choose a commuter tool."/><section className="commuter-map-layout"><div className="commuter-map-card"><CommuterMap pickMode={pickMode} onPick={choosePoint} pins={pins}/>{pickMode&&<div className="map-pick-banner">Zoom in, then tap the exact spot for your {pickMode==='origin'?'starting point':'destination'}. <button onClick={()=>setPickMode('')}>Cancel</button></div>}</div><aside className="commuter-tools-panel"><div className="commuter-panel-head"><span className="welcome-kicker"><Activity size={14}/> FLOWSTATE COMMUTER</span><h2>Plan around your day</h2><p>Choose an exact point on the map, then start your route.</p></div><div className="pin-pickers"><button className={`pin-picker ${pickMode==='origin'?'pin-picker-active':''}`} onClick={()=>setPickMode('origin')}><span className="pin-picker-dot origin-dot"/><span><small>STARTING POINT</small><b>{pins.origin?.label||'Choose on map'}</b></span><MapPin size={16}/></button><button className={`pin-picker ${pickMode==='destination'?'pin-picker-active':''}`} onClick={()=>setPickMode('destination')}><span className="pin-picker-dot destination-dot"/><span><small>DESTINATION</small><b>{pins.destination?.label||'Choose on map'}</b></span><MapPin size={16}/></button></div><div className="commuter-tool-list">{options.map(([id,Icon,title,desc])=><button className="commuter-tool" key={id} onClick={()=>navigate(id)}><span><Icon size={18}/></span><div><b>{title}</b><small>{desc}</small></div><ArrowRight size={16}/></button>)}</div><div className="commuter-alert-mini"><div><b>City alerts</b><span>{data.broadcasts?.length||0} active</span></div>{data.broadcasts?.slice(0,2).map(alert=><p key={alert.broadcast_id}><AlertTriangle size={13}/>{alert.message}</p>)}{!data.broadcasts?.length&&<small>No active alerts right now.</small>}</div><small className="commuter-map-note">Route times are estimates. Weather is included when a forecast is available.</small></aside></section></>;
-}
-
-function CommuterMap({pickMode,onPick,pins}) {
-  const containerRef=useRef(null),markersRef=useRef([]);const {map,mapRef,mapError}=useGoogleMap(containerRef,12);
-  useEffect(()=>{if(!map)return;const listener=map.addListener('click',event=>{if(pickMode&&event.latLng)onPick({latitude:event.latLng.lat(),longitude:event.latLng.lng(),label:`Map point (${event.latLng.lat().toFixed(5)}, ${event.latLng.lng().toFixed(5)})`});});map.setOptions({draggableCursor:pickMode?'crosshair':null});return()=>listener.remove();},[map,pickMode,onPick]);
-  useEffect(()=>{if(!map)return;markersRef.current.forEach(marker=>marker.setMap(null));markersRef.current=[];for(const [key,color,label] of [['origin','#087e83','Starting point'],['destination','#d47763','Destination']]){const point=pins?.[key];if(point)markersRef.current.push(new window.google.maps.Marker({map,position:{lat:Number(point.latitude),lng:Number(point.longitude)},title:label,icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:8,fillColor:color,fillOpacity:1,strokeColor:'#fff',strokeWeight:3}}));}return()=>markersRef.current.forEach(marker=>marker.setMap(null));},[map,pins]);
-  return <><div className="commuter-map" id="commuter-home-map" ref={containerRef} aria-label="Interactive Bengaluru map"/><MapSetupNotice message={mapError}/></>;
-}
-
-function CommuterWorkspaceMap() {
-  const [pins]=useState(()=>{try{return JSON.parse(sessionStorage.getItem('flowstateJourneyPoints')||'{}');}catch{return {};}});
-  return <section className="commuter-workspace-map"><div className="commuter-map-card"><CommuterMap pickMode="" onPick={()=>{}} pins={pins}/><div className="workspace-map-label"><MapPin size={14}/> Bengaluru map</div></div></section>;
-}
-
-function AuthorityHome({data,navigate}) {
-  const open=(data.incidents||[]).filter(x=>x.status==='reported').length;return <><PageHeading eyebrow="RESTRICTED OPERATIONS CONSOLE" title="City operations" subtitle="Review incoming reports, footage, and public safety notices." action={<span className="authority-badge"><ShieldCheck size={14}/> AUTHORIZED</span>}/><div className="authority-banner"><div><span className="welcome-kicker"><Activity size={14}/> OPERATIONS DESK</span><h2>Review first. Publish with confidence.</h2><p>Community reports are unverified until reviewed by your team.</p></div><button className="button button-light" onClick={()=>navigate('authority-map')}>Review reports <ArrowRight size={15}/></button></div><section className="metric-grid authority-metrics"><Metric icon={AlertTriangle} label="Awaiting review" value={n(open)} sub="Community reports not yet verified" tone="orange"/><Metric icon={MapPin} label="Active city coverage" value={n(data.coverage.length)} sub="Historical road segments" tone="blue"/><Metric icon={Camera} label="Registered cameras" value={n(data.cameras.length)} sub="Authorized source registry" tone="violet"/><Metric icon={Bell} label="Active broadcasts" value={n(data.broadcasts?.length)} sub="Published notices" tone="green"/></section><section className="authority-actions"><button className="authority-action" onClick={()=>navigate('authority-map')}><span><MapIcon/></span><div><b>Incident command map</b><small>Locate, review and resolve citizen reports.</small></div><ArrowRight/></button><button className="authority-action" onClick={()=>navigate('cameras')}><span><Video/></span><div><b>CCTV review room</b><small>Upload an authorized clip and inspect saved footage.</small></div><ArrowRight/></button><button className="authority-action" onClick={()=>navigate('broadcasts')}><span><Bell/></span><div><b>Public alert desk</b><small>Broadcast verified incidents to commuters.</small></div><ArrowRight/></button></section><section className="card report-list-card"><div className="card-heading"><div><h2>Latest incoming reports</h2><p>Location and verification state</p></div><button className="text-action" onClick={()=>navigate('authority-map')}>Open incident map <ArrowRight size={14}/></button></div><div className="report-list">{data.incidents.slice(0,4).map(item=><ReportItem key={item.incident_id} item={item}/>)}{!data.incidents.length&&<div className="empty-state"><b>No reports received yet</b></div>}</div></section></>;
-}
-
-function AuthorityIncidentMap({data,refresh,setToast}) {
-  const containerRef=useRef(null),markersRef=useRef([]);const {map,mapRef,mapError}=useGoogleMap(containerRef,11);const [filter,setFilter]=useState('reported');const [busyId,setBusyId]=useState('');const shown=data.incidents.filter(x=>filter==='all'||x.status===filter);const located=shown.filter(x=>x.latitude!=null&&x.longitude!=null);
-  useEffect(()=>{if(!map)return;markersRef.current.forEach(marker=>marker.setMap(null));markersRef.current=[];located.forEach(item=>{const marker=new window.google.maps.Marker({map,position:{lat:Number(item.latitude),lng:Number(item.longitude)},title:item.category.replaceAll('_',' ')});const content=document.createElement('div'),title=document.createElement('b'),place=document.createElement('div'),status=document.createElement('small');title.textContent=item.category.replaceAll('_',' ');place.textContent=[item.area,item.road].filter(Boolean).join(' · ');status.textContent=item.status;content.append(title,place,status);const info=new window.google.maps.InfoWindow({content});marker.addListener('click',()=>info.open({map,anchor:marker}));markersRef.current.push(marker);});if(located.length){const bounds=new window.google.maps.LatLngBounds();located.forEach(item=>bounds.extend({lat:Number(item.latitude),lng:Number(item.longitude)}));if(located.length===1){map.setCenter(bounds.getCenter());map.setZoom(14);}else map.fitBounds(bounds,40);}return()=>markersRef.current.forEach(marker=>marker.setMap(null));},[map,data.incidents,filter]);
-  async function review(item,status){setBusyId(item.incident_id);try{await api(`/api/incidents/${item.incident_id}`,{method:'PATCH',body:JSON.stringify({status,official_note:''})});await refresh();setToast(`Incident marked ${status}.`);}catch(e){setToast(e.message);}finally{setBusyId('');}}
-  return <><PageHeading eyebrow="INCIDENT COMMAND" title="Reported incident map" subtitle="Reports with coordinates are pinned. Review each report before making it official." action={<span className="authority-badge"><ShieldCheck size={14}/> AUTHORITY ONLY</span>}/><div className="incident-map-layout"><section className="map-frame authority-map-frame"><div id="authority-incident-map" ref={containerRef}/><MapSetupNotice message={mapError}/><div className="map-overlay"><MapPin size={14}/> {located.length} mapped · {shown.length-located.length} without coordinates</div></section><aside className="card authority-incident-panel"><div className="card-heading"><div><h2>Report queue</h2><p>Review and update incident status</p></div><select className="compact-select" value={filter} onChange={e=>setFilter(e.target.value)}><option value="reported">Needs review</option><option value="verified">Verified</option><option value="resolved">Resolved</option><option value="all">All reports</option></select></div><div className="report-list">{shown.map(item=><article className="authority-report" key={item.incident_id}><ReportItem item={item}/><div className="authority-report-actions">{item.latitude!=null&&<button className="text-action" onClick={()=>{mapRef.current?.setCenter({lat:Number(item.latitude),lng:Number(item.longitude)});mapRef.current?.setZoom(16);}}><LocateFixed size={14}/> Locate</button>}{item.status==='reported'&&<><button className="button button-primary" disabled={busyId===item.incident_id} onClick={()=>review(item,'verified')}><Check size={13}/> Verify</button><button className="button button-secondary" disabled={busyId===item.incident_id} onClick={()=>review(item,'rejected')}><X size={13}/> Reject</button></>}</div></article>)}{!shown.length&&<div className="empty-state"><b>No reports in this queue</b><small>New commuter reports appear here.</small></div>}</div></aside></div></>;
-}
-
-function Broadcasts({data,refresh,setToast}) {
-  const [incidentId,setIncidentId]=useState(''),[message,setMessage]=useState(''),[severity,setSeverity]=useState('warning'),[busy,setBusy]=useState(false);const verified=data.incidents.filter(x=>x.status==='verified');
-  async function submit(e){e.preventDefault();setBusy(true);try{await api(`/api/incidents/${incidentId}/broadcast`,{method:'POST',body:JSON.stringify({message,severity})});setMessage('');await refresh();setToast('Public alert is now active.');}catch(err){setToast(err.message);}finally{setBusy(false);}}
-  return <><PageHeading eyebrow="PUBLIC INFORMATION DESK" title="Broadcast an incident" subtitle="Only incidents verified by an authority can be announced to commuters."/><div className="broadcast-layout"><section className="card form-card"><div className="card-heading"><div><h2>Compose city alert</h2><p>Keep the wording clear and include practical route advice.</p></div><Bell className="muted-icon"/></div><form className="incident-form" onSubmit={submit}><label>Verified incident<select required value={incidentId} onChange={e=>setIncidentId(e.target.value)}><option value="">Choose verified report</option>{verified.map(x=><option key={x.incident_id} value={x.incident_id}>{x.category.replaceAll('_',' ')} · {[x.area,x.road].filter(Boolean).join(' / ')||x.incident_id.slice(0,8)}</option>)}</select></label><label>Alert message<textarea required minLength="10" maxLength="500" rows="4" value={message} onChange={e=>setMessage(e.target.value)} placeholder="What happened, where, and what should drivers do?"/></label><label>Severity<select value={severity} onChange={e=>setSeverity(e.target.value)}><option value="info">Information</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label><button className="button button-primary" disabled={busy||!verified.length}><Bell size={15}/>{busy?'Publishing…':'Publish alert'}</button>{!verified.length&&<small className="form-hint">There are no verified incidents ready to broadcast.</small>}</form></section><section className="card report-list-card"><div className="card-heading"><div><h2>Active public alerts</h2><p>Visible on the commuter portal</p></div><span className="pill pill-neutral">{data.broadcasts?.length||0} ACTIVE</span></div><div className="alert-list">{data.broadcasts?.map(alert=><article className={`public-alert severity-${alert.severity}`} key={alert.broadcast_id}><span className="alert-severity"><Bell size={15}/></span><div><b>{alert.message}</b><small>{[alert.area,alert.road].filter(Boolean).join(' · ')||'Bengaluru'} · {new Date(alert.created_at).toLocaleString('en-IN')}</small></div><span className="status-chip status-orange">{alert.severity}</span></article>)}</div>{!data.broadcasts?.length&&<div className="empty-state"><b>No active alerts</b><small>Published alerts appear on the commuter home screen.</small></div>}</section></div></>;
-}
-
-function LocationPrediction({data,setToast}) {
-  const areas=[...new Set(data.coverage.map(x=>x.area).filter(Boolean))];const [area,setArea]=useState(''),[road,setRoad]=useState(''),[block,setBlock]=useState('Evening'),[weather,setWeather]=useState('Clear'),[result,setResult]=useState(null),[busy,setBusy]=useState(false),[position,setPosition]=useState(null);
-  const roads=data.coverage.filter(x=>!area||x.area===area);function chooseArea(value){setArea(value);setRoad(data.coverage.find(x=>x.area===value)?.road||'');setResult(null);}
-  function locate(){if(!navigator.geolocation){setToast('Location is not available in this browser.');return;}navigator.geolocation.getCurrentPosition(p=>setPosition({latitude:p.coords.latitude,longitude:p.coords.longitude}),()=>setToast('Location access was not granted.'),{enableHighAccuracy:false,timeout:10000});}
-  async function predict(e){e.preventDefault();setBusy(true);setResult(null);try{const response=await api('/api/predict',{method:'POST',body:JSON.stringify({'Area Name':area,'Road/Intersection Name':road,'Weather Conditions':weather,'Roadwork and Construction Activity':'Unknown',TimeBlock:block})});setResult(response);}catch(err){setResult({error:err.message});}finally{setBusy(false);}}
-  return <><PageHeading eyebrow="LOCATION TRAFFIC ESTIMATE" title="Check a road before you go" subtitle="Choose a covered Bengaluru road to see an estimate for the next time block." action={<button className="button button-secondary" onClick={locate}><LocateFixed size={15}/>{position?'Location captured':'Use my location'}</button>}/><div className="model-warning"><TrendingUp size={17}/><span><b>Estimate based on past records.</b> It is not a live traffic reading. Your location is used only in this browser.</span></div><div className="predict-grid location-predict-grid"><section className="card form-card"><div className="card-heading"><div><h2>Select your location</h2><p>Only roads with project history are available.</p></div><MapPin className="muted-icon"/></div><form className="incident-form" onSubmit={predict}><label>Area<select required value={area} onChange={e=>chooseArea(e.target.value)}><option value="">Select an area</option>{areas.map(x=><option key={x}>{x}</option>)}</select></label><label>Road or junction<select required value={road} onChange={e=>setRoad(e.target.value)}><option value="">Select a covered road</option>{roads.map(x=><option value={x.road} key={`${x.area}-${x.road}`}>{x.road}</option>)}</select></label><div className="form-pair"><label>Time of day<select value={block} onChange={e=>setBlock(e.target.value)}>{blocks.map(x=><option key={x}>{x}</option>)}</select></label><label>Weather<select value={weather} onChange={e=>setWeather(e.target.value)}>{['Clear','Cloudy','Rainy','Foggy','Unknown'].map(x=><option key={x}>{x}</option>)}</select></label></div><button className="button button-primary" disabled={busy||!area||!road}><Sparkles size={15}/>{busy?'Estimating…':'Get traffic estimate'}</button></form>{result&&<ResultCard result={result}/>}</section><aside className="card location-side"><span className="map-side-icon"><MapIcon size={19}/></span><div className="eyebrow">YOUR SELECTED CORRIDOR</div><h2>{road||'Choose a covered road'}</h2><p>{area||'Select an area to match an available historical segment.'}</p>{position&&<div className="selected-place"><b>Approximate device location</b><span>{position.latitude.toFixed(4)}, {position.longitude.toFixed(4)}</span><small>It does not change the road you selected.</small></div>}<div className="map-stat"><span>Historical records for road</span><b>{n(data.coverage.find(x=>x.area===area&&x.road===road)?.record_count)}</b></div><div className="map-stat"><span>Data source</span><b>Research dataset</b></div><p className="map-attribution">If the road has little historical data, the estimate may be less useful. Treat the estimate as a guide, not a live reading.</p></aside></div></>;
+function PortalLogin({ role, onUser, onBack }) {
+  const authority = role === 'authority';
+  const [mode, setMode] = useState('login'), [login, setLogin] = useState(''), [password, setPassword] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  async function submit(e) {
+    e.preventDefault(); setError(''); setBusy(true);
+    try {
+      // Everyone signs in with an email; the authority account set up in .env may use its username instead.
+      const identifier = login.trim();
+      const credentials = mode === 'register' || identifier.includes('@') ? { email: identifier } : { username: identifier };
+      const result = await api(mode === 'login' ? '/api/auth/login' : '/api/auth/register', { method: 'POST', body: JSON.stringify({ ...credentials, password }) });
+      if (result.user?.role !== (authority ? 'authority' : 'citizen')) throw new Error(authority ? 'This account is not an authority account.' : 'Use the authority sign-in page for an authority account.');
+      sessionStorage.setItem('flowstateToken', result.access_token);
+      onUser(result.user);
+    } catch (err) {
+      sessionStorage.removeItem('flowstateToken');
+      setError(err.message === 'Failed to fetch' ? 'Could not connect. Check that the project is running, then try again.' : err.message);
+    } finally { setBusy(false); }
+  }
+  return <main className="portal-login"><button className="login-back" onClick={onBack}><ArrowRight size={15} /> Back to portal selection</button><section className="login-card"><a className="brand landing-brand" href="/"><span className="brand-mark"><Activity size={21} /></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span></a><span className={`login-emblem ${authority ? 'authority-emblem' : ''}`}>{authority ? <ShieldCheck size={22} /> : <Navigation size={22} />}</span><div className="eyebrow">{authority ? 'RESTRICTED AUTHORITY ACCESS' : 'COMMUTER PORTAL'}</div><h1>{authority ? 'Authority sign in' : mode === 'register' ? 'Create your commuter account' : 'Welcome back'}</h1><p>{authority ? 'Sign in with an authority account. Officials can request access from a commuter account.' : 'Sign in to use trip planning and community reporting.'}</p>
+    <form onSubmit={submit}>{authority
+      ? <label>Email or username<input autoComplete="username" required minLength="3" value={login} onChange={e => setLogin(e.target.value)} placeholder="Authority email or username" /></label>
+      : <label>Email<input type="email" autoComplete="email" required value={login} onChange={e => setLogin(e.target.value)} placeholder="you@example.com" /></label>}<label>Password<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 10 : 1} required value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>{error && <div className="inline-error">{error}</div>}<button className="button button-primary auth-submit" disabled={busy}>{busy ? 'Checking…' : mode === 'register' ? 'Create commuter account' : 'Sign in securely'}</button></form>
+    {!authority && <button className="auth-switch" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}>{mode === 'login' ? 'New here? Create an account' : 'Already have an account? Sign in'}</button>}<div className="login-foot"><ShieldCheck size={14} />{authority ? 'Authority access is granted only after verification by an existing authority.' : 'Your personal trip details remain private.'}</div></section><span className="login-watermark">FLOWSTATE · BENGALURU</span></main>;
 }
 
 function PageHeading({ eyebrow, title, subtitle, action }) { return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>; }
-function AuthModal({close,onAuth}) {
-  const [mode,setMode]=useState('login'),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[email,setEmail]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  async function submit(e){e.preventDefault();setError('');setBusy(true);try{const result=await api(mode==='login'?'/api/auth/login':'/api/auth/register',{method:'POST',body:JSON.stringify({username,password,...(mode==='register'&&email?{email}:{})})});sessionStorage.setItem('flowstateToken',result.access_token);onAuth(result);}catch(err){setError(err.message);}finally{setBusy(false);}}
-  return <div className="modal-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)close();}}><section className="auth-modal"><button className="modal-close icon-button" onClick={close} aria-label="Close"><X size={18}/></button><span className="auth-mark"><ShieldCheck size={21}/></span><div className="eyebrow">FLOWSTATE ACCOUNT</div><h2>{mode==='login'?'Welcome back':'Create a citizen account'}</h2><p>Accounts are for project collaboration. Authority access is assigned separately.</p><form onSubmit={submit}><label>Username<input autoComplete="username" minLength="3" required value={username} onChange={e=>setUsername(e.target.value)} placeholder="Your username"/></label>{mode==='register'&&<label>Email <small>optional</small><input type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com"/></label>}<label>Password<input type="password" autoComplete={mode==='login'?'current-password':'new-password'} minLength={mode==='login'?1:10} required value={password} onChange={e=>setPassword(e.target.value)} placeholder={mode==='login'?'Your password':'At least 10 characters'}/></label>{error&&<div className="inline-error">{error}</div>}<button className="button button-primary auth-submit" disabled={busy}>{busy?'Please wait…':mode==='login'?'Sign in':'Create account'}</button></form><button className="auth-switch" onClick={()=>{setMode(mode==='login'?'register':'login');setError('');}}>{mode==='login'?"New to this project? Create an account":"Already registered? Sign in"}</button></section></div>;
+
+// ---------- commuter home ----------
+
+function UserHome({ data, navigate }) {
+  const [pins, setPins] = useState(() => readJson('flowstateJourneyPoints', {}));
+  const [pickMode, setPickMode] = useState('');
+  const [zones, setZones] = useState([]);
+  const [notices, setNotices] = useState([]);
+  useEffect(() => {
+    api('/api/forecast/zones').then(b => setZones(b.zones)).catch(() => setZones([]));
+    api('/api/incidents/public').then(b => setNotices(b.incidents)).catch(() => setNotices([]));
+  }, []);
+  const choosePoint = useCallback(point => {
+    setPins(previous => {
+      const next = { ...previous, [pickMode]: { ...point, label: `Map point (${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)})` } };
+      writeJson('flowstateJourneyPoints', next);
+      return next;
+    });
+    setPickMode('');
+  }, [pickMode]);
+  const options = [['journeys', Navigation, 'Start a journey', 'Compare routes, risk and departure time.'], ['plan', Route, 'Plan a trip', 'Save a future trip and get alerts.'], ['forecast-road', TrendingUp, 'Road forecast', 'Expected congestion for a road and time.'], ['incidents', AlertTriangle, 'Report an incident', 'Share a road issue with the authority.']];
+  const busiest = [...zones].sort((a, b) => b.expected_load - a.expected_load).slice(0, 3);
+  return <><PageHeading eyebrow="YOUR BENGALURU COMMUTE" title="Where are you headed?" subtitle="Zones show the current congestion outlook; pins show verified incidents and official notices." />
+    <section className="commuter-map-layout"><div className="commuter-map-card"><CommuterMap pickMode={pickMode} onPick={choosePoint} pins={pins} zones={zones} notices={notices} />{pickMode && <div className="map-pick-banner">Zoom in, then tap the exact spot for your {pickMode === 'origin' ? 'starting point' : 'destination'}. <button onClick={() => setPickMode('')}>Cancel</button></div>}
+      <div className="map-legend">{Object.keys(LEVELS).map(name => <LevelBadge key={name} value={name} compact />)}</div></div>
+      <aside className="commuter-tools-panel"><div className="commuter-panel-head"><span className="welcome-kicker"><Activity size={14} /> FLOWSTATE COMMUTER</span><h2>Plan around your day</h2><p>Choose exact points on the map, then start your route.</p></div>
+        <div className="pin-pickers">{['origin', 'destination'].map(key => <button key={key} className={`pin-picker ${pickMode === key ? 'pin-picker-active' : ''}`} onClick={() => setPickMode(key)}><span className={`pin-picker-dot ${key}-dot`} /><span><small>{key === 'origin' ? 'STARTING POINT' : 'DESTINATION'}</small><b>{pins[key]?.label || 'Choose on map'}</b></span><MapPin size={16} /></button>)}</div>
+        <div className="commuter-tool-list">{options.map(([id, Icon, title, desc]) => <button className="commuter-tool" key={id} onClick={() => navigate(id)}><span><Icon size={18} /></span><div><b>{title}</b><small>{desc}</small></div><ArrowRight size={16} /></button>)}</div>
+        <div className="commuter-alert-mini"><div><b>Busiest zones now</b><span>{zones.length} zones</span></div>{busiest.map(z => <p key={z.zone_id}><LevelBadge value={z.level} compact /> {z.name}</p>)}{!zones.length && <small>Zone outlook is loading or unavailable.</small>}</div>
+        <div className="commuter-alert-mini"><div><b>City alerts</b><span>{data.broadcasts?.length || 0} active</span></div>{data.broadcasts?.slice(0, 2).map(alert => <p key={alert.broadcast_id}><AlertTriangle size={13} />{alert.message}</p>)}{!data.broadcasts?.length && <small>No active alerts right now.</small>}</div>
+        <small className="commuter-map-note">Forecasts are research estimates; each one names its method and confidence.</small></aside></section></>;
 }
-function Overview({ data, busy, navigate }) {
+
+function CommuterMap({ pickMode, onPick, pins, zones = [], notices = [] }) {
+  const containerRef = useRef(null), itemsRef = useRef([]);
+  const { map, mapError } = useGoogleMap(containerRef, 12);
+  useEffect(() => {
+    if (!map) return;
+    const listener = map.addListener('click', event => { if (pickMode && event.latLng) onPick({ latitude: event.latLng.lat(), longitude: event.latLng.lng() }); });
+    map.setOptions({ draggableCursor: pickMode ? 'crosshair' : null });
+    return () => listener.remove();
+  }, [map, pickMode, onPick]);
+  useEffect(() => {
+    if (!map) return;
+    itemsRef.current.forEach(item => item.setMap(null));
+    itemsRef.current = [];
+    for (const zone of zones.filter(z => z.latitude != null)) {
+      const meta = level(zone.level);
+      itemsRef.current.push(new window.google.maps.Circle({ map, center: { lat: zone.latitude, lng: zone.longitude }, radius: zone.radius_m || 2000, strokeColor: meta.color, strokeOpacity: 0.8, strokeWeight: 2, fillColor: meta.color, fillOpacity: 0.1, clickable: false }));
+    }
+    for (const notice of notices) {
+      const marker = new window.google.maps.Marker({ map, position: { lat: notice.latitude, lng: notice.longitude }, title: CATEGORY_LABELS[notice.category] || notice.category });
+      const info = new window.google.maps.InfoWindow({ content: infoContent(CATEGORY_LABELS[notice.category] || notice.category, [notice.official ? 'Official notice' : 'Verified report', notice.closure ? 'Road closed' : null, notice.details, notice.expires_at ? `Until ${dateTime(notice.expires_at)}` : null]) });
+      marker.addListener('click', () => info.open({ map, anchor: marker }));
+      itemsRef.current.push(marker);
+    }
+    for (const [key, color, title] of [['origin', '#087e83', 'Starting point'], ['destination', '#d47763', 'Destination']]) {
+      const point = pins?.[key];
+      if (point) itemsRef.current.push(new window.google.maps.Marker({ map, position: { lat: Number(point.latitude), lng: Number(point.longitude) }, title, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 } }));
+    }
+    return () => itemsRef.current.forEach(item => item.setMap(null));
+  }, [map, pins, zones, notices]);
+  return <><div className="commuter-map" id="commuter-home-map" ref={containerRef} aria-label="Interactive Bengaluru map" /><MapSetupNotice message={mapError} /></>;
+}
+
+function CommuterWorkspaceMap() {
+  const [pins] = useState(() => readJson('flowstateJourneyPoints', {}));
+  return <section className="commuter-workspace-map"><div className="commuter-map-card"><CommuterMap pickMode="" onPick={() => {}} pins={pins} /><div className="workspace-map-label"><MapPin size={14} /> Bengaluru map</div></div></section>;
+}
+
+// ---------- authority screens ----------
+
+function AuthorityHome({ data, navigate }) {
+  const open = data.incidents.filter(x => x.status === 'reported').length;
+  const reports = data.incidents.filter(x => x.status !== 'duplicate');  // duplicates are counted on the original
+  const active = data.models.find(m => m.status === 'active');
+  return <><PageHeading eyebrow="RESTRICTED OPERATIONS CONSOLE" title="City operations" subtitle="Alerts, reports, notices, and the forecasting pipeline at a glance." action={<span className="authority-badge"><ShieldCheck size={14} /> AUTHORIZED</span>} />
+    <div className="authority-banner"><div><span className="welcome-kicker"><Activity size={14} /> OPERATIONS DESK</span><h2>Review first. Publish with confidence.</h2><p>Community reports are unverified until reviewed by your team.</p></div><button className="button button-light" onClick={() => navigate('alerts')}>Open alerts <ArrowRight size={15} /></button></div>
+    <section className="metric-grid authority-metrics"><Metric icon={AlertTriangle} label="Awaiting review" value={n(open)} sub="Community reports not yet verified" tone="orange" /><Metric icon={Bell} label="Active alerts" value={n(data.alerts.length)} sub="Zones, closures, hotspots, data quality" tone="violet" /><Metric icon={Camera} label="Registered cameras" value={n(data.cameras.length)} sub={`${data.cameras.filter(c => c.has_stream).length} with live streams`} tone="blue" /><Metric icon={Cpu} label="Forecasting model" value={active ? 'Active' : 'Patterns'} sub={active ? active.version : 'No accepted model in use'} tone="green" /></section>
+    <section className="authority-actions"><button className="authority-action" onClick={() => navigate('zones')}><span><Layers /></span><div><b>Zone monitor</b><small>Congestion outlook by zone and road.</small></div><ArrowRight /></button><button className="authority-action" onClick={() => navigate('notices')}><span><Radio /></span><div><b>Official notices</b><small>VIP movement, closures, metro work, diversions.</small></div><ArrowRight /></button><button className="authority-action" onClick={() => navigate('demand')}><span><Users /></span><div><b>Planned demand</b><small>Future trips, corridors and hotspots.</small></div><ArrowRight /></button></section>
+    <section className="card report-list-card"><div className="card-heading"><div><h2>Active alerts</h2><p>Newest first</p></div><button className="text-action" onClick={() => navigate('alerts')}>All alerts <ArrowRight size={14} /></button></div>
+      {data.alerts.length === 0 ? <div className="empty-state"><b>No active alerts</b></div> : <div className="alert-list">{data.alerts.slice(0, 4).map(a => <article className={`ops-alert ops-${a.level}`} key={a.alert_id}><span className="alert-severity"><AlertTriangle size={15} /></span><div><b>{a.title}</b><p>{a.message}</p>{a.recommendation && <p className="recommendation"><b>Recommended:</b> {a.recommendation}</p>}</div></article>)}</div>}</section>
+    <section className="card report-list-card"><div className="card-heading"><div><h2>Latest incoming reports</h2><p>Location and verification state</p></div><button className="text-action" onClick={() => navigate('authority-map')}>Open incident map <ArrowRight size={14} /></button></div><div className="report-list">{reports.slice(0, 4).map(item => <ReportItem key={item.incident_id} item={item} />)}{!reports.length && <div className="empty-state"><b>No reports received yet</b></div>}</div></section></>;
+}
+
+function AuthorityIncidentMap({ data, refresh, setToast }) {
+  const containerRef = useRef(null), markersRef = useRef([]);
+  const { map, mapRef, mapError } = useGoogleMap(containerRef, 11);
+  const [filter, setFilter] = useState('reported');
+  const [busyId, setBusyId] = useState('');
+  const shown = data.incidents.filter(x => filter === 'all' || x.status === filter);
+  const located = shown.filter(x => x.latitude != null && x.longitude != null);
+  useEffect(() => {
+    if (!map) return;
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current = [];
+    located.forEach(item => {
+      const marker = new window.google.maps.Marker({ map, position: { lat: Number(item.latitude), lng: Number(item.longitude) }, title: CATEGORY_LABELS[item.category] || item.category });
+      const info = new window.google.maps.InfoWindow({ content: infoContent(CATEGORY_LABELS[item.category] || item.category, [[item.area, item.road].filter(Boolean).join(' · '), item.status, item.corroboration_count ? `${item.corroboration_count} confirmation${item.corroboration_count === 1 ? '' : 's'}` : null]) });
+      marker.addListener('click', () => info.open({ map, anchor: marker }));
+      markersRef.current.push(marker);
+    });
+    if (located.length) {
+      const bounds = new window.google.maps.LatLngBounds();
+      located.forEach(item => bounds.extend({ lat: Number(item.latitude), lng: Number(item.longitude) }));
+      if (located.length === 1) { map.setCenter(bounds.getCenter()); map.setZoom(14); } else map.fitBounds(bounds, 40);
+    }
+    return () => markersRef.current.forEach(marker => marker.setMap(null));
+  }, [map, data.incidents, filter]);
+  async function review(item, status) {
+    setBusyId(item.incident_id);
+    try { await api(`/api/incidents/${item.incident_id}`, { method: 'PATCH', body: JSON.stringify({ status, official_note: '' }) }); await refresh(); setToast(`Incident marked ${status}.`); }
+    catch (e) { setToast(e.message); } finally { setBusyId(''); }
+  }
+  return <><PageHeading eyebrow="INCIDENT COMMAND" title="Reported incident map" subtitle="Reports with coordinates are pinned. Review each report before making it official." action={<span className="authority-badge"><ShieldCheck size={14} /> AUTHORITY ONLY</span>} />
+    <div className="incident-map-layout"><section className="map-frame authority-map-frame"><div id="authority-incident-map" ref={containerRef} /><MapSetupNotice message={mapError} /><div className="map-overlay"><MapPin size={14} /> {located.length} mapped · {shown.length - located.length} without coordinates</div></section>
+      <aside className="card authority-incident-panel"><div className="card-heading"><div><h2>Report queue</h2><p>Review and update incident status</p></div><select className="compact-select" value={filter} onChange={e => setFilter(e.target.value)}><option value="reported">Needs review</option><option value="verified">Verified</option><option value="resolved">Resolved</option><option value="stale">Stale</option><option value="all">All reports</option></select></div>
+        <div className="report-list">{shown.map(item => <article className="authority-report" key={item.incident_id}><ReportItem item={item} /><div className="authority-report-actions">{item.latitude != null && <button className="text-action" onClick={() => { mapRef.current?.setCenter({ lat: Number(item.latitude), lng: Number(item.longitude) }); mapRef.current?.setZoom(16); }}><LocateFixed size={14} /> Locate</button>}
+          {item.status === 'reported' && <><button className="button button-primary" disabled={busyId === item.incident_id} onClick={() => review(item, 'verified')}><Check size={13} /> Verify</button><button className="button button-secondary" disabled={busyId === item.incident_id} onClick={() => review(item, 'rejected')}><X size={13} /> Reject</button></>}
+          {item.status === 'verified' && <button className="button button-secondary" disabled={busyId === item.incident_id} onClick={() => review(item, 'resolved')}><Check size={13} /> Resolve</button>}</div></article>)}
+          {!shown.length && <div className="empty-state"><b>No reports in this queue</b><small>New commuter reports appear here.</small></div>}</div></aside></div></>;
+}
+
+function Broadcasts({ data, refresh, setToast }) {
+  const [incidentId, setIncidentId] = useState(''), [message, setMessage] = useState(''), [severity, setSeverity] = useState('warning'), [busy, setBusy] = useState(false);
+  const verified = data.incidents.filter(x => x.status === 'verified');
+  async function submit(e) {
+    e.preventDefault(); setBusy(true);
+    try { await api(`/api/incidents/${incidentId}/broadcast`, { method: 'POST', body: JSON.stringify({ message, severity }) }); setMessage(''); await refresh(); setToast('Public alert is now active.'); }
+    catch (err) { setToast(err.message); } finally { setBusy(false); }
+  }
+  return <><PageHeading eyebrow="PUBLIC INFORMATION DESK" title="Broadcast an incident" subtitle="Only incidents verified by an authority can be announced to commuters." />
+    <div className="broadcast-layout"><section className="card form-card"><div className="card-heading"><div><h2>Compose city alert</h2><p>Keep the wording clear and include practical route advice.</p></div><Bell className="muted-icon" /></div>
+      <form className="incident-form" onSubmit={submit}><label>Verified incident<select required value={incidentId} onChange={e => setIncidentId(e.target.value)}><option value="">Choose verified report</option>{verified.map(x => <option key={x.incident_id} value={x.incident_id}>{CATEGORY_LABELS[x.category] || x.category} · {[x.area, x.road].filter(Boolean).join(' / ') || x.incident_id.slice(0, 8)}</option>)}</select></label>
+        <label>Alert message<textarea required minLength="10" maxLength="500" rows="4" value={message} onChange={e => setMessage(e.target.value)} placeholder="What happened, where, and what should drivers do?" /></label>
+        <label>Severity<select value={severity} onChange={e => setSeverity(e.target.value)}><option value="info">Information</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
+        <button className="button button-primary" disabled={busy || !verified.length}><Bell size={15} />{busy ? 'Publishing…' : 'Publish alert'}</button>{!verified.length && <small className="form-hint">There are no verified incidents ready to broadcast.</small>}</form></section>
+      <section className="card report-list-card"><div className="card-heading"><div><h2>Active public alerts</h2><p>Visible on the commuter portal</p></div><span className="pill pill-neutral">{data.broadcasts?.length || 0} ACTIVE</span></div><div className="alert-list">{data.broadcasts?.map(alert => <article className={`public-alert severity-${alert.severity}`} key={alert.broadcast_id}><span className="alert-severity"><Bell size={15} /></span><div><b>{alert.message}</b><small>{[alert.area, alert.road].filter(Boolean).join(' · ') || 'Bengaluru'} · {dateTime(alert.created_at)}</small></div><span className="status-chip status-orange">{alert.severity}</span></article>)}</div>{!data.broadcasts?.length && <div className="empty-state"><b>No active alerts</b><small>Published alerts appear on the commuter home screen.</small></div>}</section></div></>;
+}
+
+function Overview({ data, navigate }) {
   const summary = data.summary;
   const totals = summary?.traffic_situation_counts || {};
-  const high = totals.High || 0, med = totals.Medium || 0, low = totals.Low || 0;
-  const labeled = high + med + low;
-  const percent = (value) => labeled ? Math.round(value / labeled * 100) : 0;
-  const segments = data.coverage.length;
+  const labeled = ['High', 'Medium', 'Low'].reduce((sum, key) => sum + (totals[key] || 0), 0);
+  const latest = data.models[0];
+  const active = data.models.find(m => m.status === 'active');
   return <>
-    <PageHeading eyebrow={`${todayLabel} · BENGALURU`} title="Traffic overview" subtitle="A research snapshot of traffic patterns across the city." action={<button className="button button-primary" onClick={() => navigate('map')}><MapIcon size={16}/> Explore map</button>}/>
-    <div className="notice-strip"><span className="notice-icon"><Activity size={16}/></span><span><b>Historical data view</b><small>Dataset: {shortDate(summary?.date_start)} – {shortDate(summary?.date_end)}. Not live traffic. A separate synthetic dataset contains {n(data.synthetic?.record_count)} simulated records.</small></span><span className="notice-badge">RESEARCH</span></div>
+    <PageHeading eyebrow={`${todayLabel} · BENGALURU`} title="Traffic data" subtitle="The historical dataset behind the forecasts, and the current model." action={<button className="button button-primary" onClick={() => navigate('coverage')}><Database size={16} /> Data coverage</button>} />
+    <div className="notice-strip"><span className="notice-icon"><Activity size={16} /></span><span><b>Historical data view</b><small>Dataset: {longDate(summary?.date_start)} – {longDate(summary?.date_end)}. Not live traffic.{data.synthetic?.available ? ` A separate synthetic dataset contains ${n(data.synthetic.record_count)} simulated records.` : ''}</small></span><span className="notice-badge">RESEARCH</span></div>
     <section className="metric-grid">
-      <Metric icon={BarChart3} label="Historical observations" value={n(summary?.record_count)} sub="Imported from reference dataset" tone="blue"/>
-      <Metric icon={MapPin} label="Road segments" value={n(summary?.road_count)} sub={`${n(segments)} segments in coverage registry`} tone="violet"/>
-      <Metric icon={ShieldCheck} label="Verified segments" value={n(data.coverage.filter(x => x.verified_coverage).length)} sub="Independent verification required" tone="green"/>
-      <Metric icon={AlertTriangle} label="Open community reports" value={n(data.incidents.filter(x => x.status === 'reported').length)} sub="Awaiting authority verification" tone="orange"/>
+      <Metric icon={Database} label="Historical observations" value={n(summary?.record_count)} sub="Validated rows from the dataset" tone="blue" />
+      <Metric icon={MapPin} label="Roads" value={n(summary?.road_count)} sub={`${n(data.segments.filter(s => s.has_map_location).length)} placed on the map`} tone="violet" />
+      <Metric icon={ShieldCheck} label="Roads with verified records" value={n(data.coverage.filter(x => x.verified_coverage).length)} sub="Authority-verified observations" tone="green" />
+      <Metric icon={AlertTriangle} label="Open community reports" value={n(data.incidents.filter(x => x.status === 'reported').length)} sub="Awaiting authority verification" tone="orange" />
     </section>
     <section className="overview-grid">
-      <div className="card traffic-card"><div className="card-heading"><div><h2>Traffic situation mix</h2><p>Historical labels · all imported observations</p></div><button className="text-action" onClick={() => navigate('predict')}>Model details <ArrowRight size={15}/></button></div>
-        <div className="donut-wrap"><div className="donut" style={{background:`conic-gradient(${COLORS.High} 0 ${percent(high)}%,${COLORS.Medium} ${percent(high)}% ${percent(high+med)}%,${COLORS.Low} ${percent(high+med)}% 100%)`}}><div className="donut-center"><b>{n(labeled)}</b><small>labeled records</small></div></div><div className="legend-list"><Legend color={COLORS.High} label="High congestion" value={high} percent={percent(high)}/><Legend color={COLORS.Medium} label="Medium congestion" value={med} percent={percent(med)}/><Legend color={COLORS.Low} label="Low congestion" value={low} percent={percent(low)}/></div></div>
-        <div className="chart-footnote"><AlertTriangle size={14}/> Labels are historical and have not been sensor-verified.</div>
-      </div>
-      <div className="card model-card"><div className="card-heading"><div><h2>Prediction model</h2><p>Offline held-out evaluation</p></div><span className="pill pill-warn">EXPERIMENTAL</span></div><div className="model-score"><span className="score-number">{data.lstm ? `${(data.lstm.test_accuracy*100).toFixed(1)}%` : '—'}</span><span className="score-label">LSTM accuracy</span></div><div className="baseline-row"><span>Majority-class baseline</span><b>{data.lstm ? `${(data.lstm.baseline_test_accuracy*100).toFixed(1)}%` : '—'}</b></div><div className="baseline-bar"><i style={{width:`${(data.lstm?.test_accuracy||0)*100}%`}}/><em style={{left:`${(data.lstm?.baseline_test_accuracy||0)*100}%`}}/></div><div className="model-disclaimer"><AlertTriangle size={16}/><span>Current LSTM is below baseline and is not suitable for live decisions.</span></div><button className="button button-secondary full-button" onClick={() => navigate('predict')}>View model evaluation <ArrowRight size={15}/></button></div>
+      <div className="card traffic-card"><div className="card-heading"><div><h2>Congestion levels in the dataset</h2><p>Share of labelled historical records</p></div></div>
+        <div className="meter-list">{['Low', 'Medium', 'High'].map(name => <div className="meter-row" key={name} title={`${name}: ${n(totals[name])} records`}><span className="meter-label"><LevelBadge value={name} compact /></span><span className="meter-track" style={{ background: level(name).track }}><i style={{ width: `${labeled ? (totals[name] || 0) / labeled * 100 : 0}%`, background: level(name).color }} /></span><b className="meter-value">{labeled ? Math.round((totals[name] || 0) / labeled * 100) : 0}%</b></div>)}</div>
+        <div className="chart-footnote"><AlertTriangle size={14} /> {n(labeled)} labelled records. Labels come from the dataset and are not sensor-verified.</div></div>
+      <div className="card model-card"><div className="card-heading"><div><h2>Forecasting model</h2><p>Hybrid LSTM → Random Forest</p></div><span className="pill pill-warn">{active ? 'ACTIVE' : 'NOT ACTIVE'}</span></div>
+        {latest ? <><div className="model-score"><span className="score-number">{latest.test.macro_f1?.toFixed(3) ?? '—'}</span><span className="score-label">test macro-F1 ({latest.version})</span></div>
+          <div className="baseline-row"><span>Best baseline</span><b>{Math.max(...Object.values(latest.baselines_test).map(b => b.macro_f1 || 0)).toFixed(3)}</b></div>
+          <div className="model-disclaimer"><AlertTriangle size={16} /><span>{latest.acceptance.passed ? 'Passed the acceptance checks.' : 'Did not pass the acceptance checks, so live forecasts use historical patterns.'}</span></div></> : <div className="empty-state"><b>No model trained yet</b></div>}
+        <button className="button button-secondary full-button" onClick={() => navigate('models')}>View model evaluation <ArrowRight size={15} /></button></div>
     </section>
-    <section className="card segment-card"><div className="card-heading"><div><h2>Road coverage</h2><p>Historical records by corridor · not real-time sensor coverage</p></div><button className="text-action" onClick={() => navigate('map')}>Open map <ArrowRight size={15}/></button></div>
-      <div className="table-wrap"><table><thead><tr><th>Area</th><th>Road / intersection</th><th>Records</th><th>Date range</th><th>Data status</th></tr></thead><tbody>{data.coverage.slice(0,7).map((row,i)=><tr key={`${row.area}-${row.road}-${i}`}><td>{row.area}</td><td className="road-name">{row.road}</td><td>{n(row.record_count)}</td><td>{shortDate(row.earliest_observation)} – {shortDate(row.latest_observation)}</td><td><span className={`status-chip ${row.verified_coverage?'status-green':'status-gray'}`}><i/>{row.verified_coverage?'Verified':'Historical · unverified'}</span></td></tr>)}</tbody></table></div>
-      {data.coverage.length > 7 && <button className="table-more" onClick={() => navigate('map')}>View all {data.coverage.length} segments <ArrowRight size={15}/></button>}
-    </section>
   </>;
 }
-function Metric({ icon: Icon, label, value, sub, tone }) { return <div className="card metric-card"><div className={`metric-icon ${tone}`}><Icon size={18}/></div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-sub">{sub}</div></div>; }
-function Legend({color,label,value,percent}) { return <div className="legend-row"><i style={{background:color}}/><span>{label}</span><b>{n(value)}</b><small>{percent}%</small></div>; }
+function Metric({ icon: Icon, label, value, sub, tone }) { return <div className="card metric-card"><div className={`metric-icon ${tone}`}><Icon size={18} /></div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-sub">{sub}</div></div>; }
 
-function TrafficMap({ data, setToast }) {
-  const containerRef=useRef(null),markerRef=useRef(null);const {map,mapRef,mapError}=useGoogleMap(containerRef,11);
-  const [query, setQuery] = useState(''); const [searching, setSearching] = useState(false); const [selection, setSelection] = useState(null); const [queryError, setQueryError] = useState('');
-  async function search(e) { e.preventDefault(); if(query.trim().length<3)return; setSearching(true); setQueryError(''); try {const r=await api(`/api/geocode?q=${encodeURIComponent(query.trim())}`); if(!r.results?.length)throw new Error('No matching place found.'); const place=r.results[0]; const lat=Number(place.latitude),lng=Number(place.longitude); if(!mapRef.current)throw new Error('The Google map is still loading. Try again in a moment.'); mapRef.current.setCenter({lat,lng});mapRef.current.setZoom(16);if(markerRef.current)markerRef.current.setMap(null);markerRef.current=new window.google.maps.Marker({map:mapRef.current,position:{lat,lng},title:place.display_name});const info=new window.google.maps.InfoWindow({content:place.display_name});info.open({map:mapRef.current,anchor:markerRef.current});setSelection(place); } catch(err){setQueryError(err.message);} finally{setSearching(false);} }
-  return <><PageHeading eyebrow="CITY EXPLORER" title="Traffic map" subtitle="Explore Bengaluru and look up places. The map does not imply live traffic coverage." action={<span className="pill pill-neutral"><span className="legend-dot"/> {data.coverage.length} historical segments</span>}/>
-    <div className="map-toolbar"><form className="search-box" onSubmit={search}><Search size={18}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search an address or landmark in Bengaluru"/><button disabled={searching}>{searching?'Searching…':'Search'}</button></form><button className="button button-secondary" onClick={()=>{mapRef.current?.setCenter({lat:12.9716,lng:77.5946});mapRef.current?.setZoom(11);}}><LocateFixed size={16}/> Reset city view</button></div>
-     {queryError&&<div className="inline-error">{queryError}</div>}
-     <div className="map-layout"><div className="map-frame"><div id="traffic-map" ref={containerRef}/><MapSetupNotice message={mapError}/><div className="map-overlay"><span className="map-status-dot"/> Historical coverage layer is not geocoded</div></div><aside className="card map-side"><div className="map-side-icon"><MapIcon size={20}/></div><h2>Coverage at a glance</h2><p>Dataset contains records for <b>{data.coverage.length}</b> area and road combinations. Coordinates and verified current conditions are not available for these records.</p><div className="map-stat"><span>Historical records</span><b>{n(data.coverage.reduce((sum,x)=>sum+Number(x.record_count||0),0))}</b></div><div className="map-stat"><span>Verified segments</span><b>{data.coverage.filter(x=>x.verified_coverage).length}</b></div>{selection&&<div className="selected-place"><b>Selected location</b><span>{selection.name||selection.display_name}</span><small>{Number(selection.latitude).toFixed(5)}, {Number(selection.longitude).toFixed(5)}</small></div>}<p className="map-attribution">Map display and place lookup by Google Maps Platform.</p></aside></div>
+function TrafficMap({ data }) {
+  const containerRef = useRef(null), markerRef = useRef(null);
+  const { mapRef, mapError } = useGoogleMap(containerRef, 11);
+  const [query, setQuery] = useState(''), [searching, setSearching] = useState(false), [selection, setSelection] = useState(null), [queryError, setQueryError] = useState('');
+  async function search(e) {
+    e.preventDefault();
+    if (query.trim().length < 3) return;
+    setSearching(true); setQueryError('');
+    try {
+      const r = await api(`/api/geocode?q=${encodeURIComponent(query.trim())}`);
+      if (!r.results?.length) throw new Error('No matching place found.');
+      const place = r.results[0];
+      const lat = Number(place.latitude), lng = Number(place.longitude);
+      if (!mapRef.current) throw new Error('The Google map is still loading. Try again in a moment.');
+      mapRef.current.setCenter({ lat, lng }); mapRef.current.setZoom(16);
+      if (markerRef.current) markerRef.current.setMap(null);
+      markerRef.current = new window.google.maps.Marker({ map: mapRef.current, position: { lat, lng }, title: place.display_name });
+      const content = document.createElement('div');
+      content.textContent = place.display_name;
+      new window.google.maps.InfoWindow({ content }).open({ map: mapRef.current, anchor: markerRef.current });
+      setSelection(place);
+    } catch (err) { setQueryError(err.message); } finally { setSearching(false); }
+  }
+  return <><PageHeading eyebrow="CITY EXPLORER" title="Place search" subtitle="Look up places in Bengaluru. Being on the map does not imply traffic-data coverage." action={<span className="pill pill-neutral">{data.coverage.length} roads with data</span>} />
+    <div className="map-toolbar"><form className="search-box" onSubmit={search}><Search size={18} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search an address or landmark in Bengaluru" /><button disabled={searching}>{searching ? 'Searching…' : 'Search'}</button></form><button className="button button-secondary" onClick={() => { mapRef.current?.setCenter({ lat: 12.9716, lng: 77.5946 }); mapRef.current?.setZoom(11); }}><LocateFixed size={16} /> Reset city view</button></div>
+    {queryError && <div className="inline-error">{queryError}</div>}
+    <div className="map-layout"><div className="map-frame"><div id="traffic-map" ref={containerRef} /><MapSetupNotice message={mapError} /></div><aside className="card map-side"><div className="map-side-icon"><MapIcon size={20} /></div><h2>Coverage at a glance</h2><p>{data.segments.filter(s => s.has_map_location).length} roads are placed on the map; {data.coverage.length} of them have traffic records.</p>{selection && <div className="selected-place"><b>Selected location</b><span>{selection.display_name}</span><small>{Number(selection.latitude).toFixed(5)}, {Number(selection.longitude).toFixed(5)}</small></div>}<p className="map-attribution">Map display and place lookup by Google Maps Platform.</p></aside></div></>;
+}
+
+// ---------- cameras ----------
+
+function CameraScreen({ data, refresh, setToast, user }) {
+  const blank = { camera_id: '', display_name: '', area: '', road: '', latitude: '', longitude: '', source_type: 'authorized_cctv', authorization_status: 'pending', operational_status: 'unknown', stream_url: '', collection_interval_seconds: 300, sample_seconds: 20, line_y: '' };
+  const [registry, setRegistry] = useState(blank);
+  const [editingCamera, setEditingCamera] = useState('');
+  const [cameraId, setCameraId] = useState(''), [file, setFile] = useState(null), [dateValue, setDateValue] = useState(() => localISODate()), [block, setBlock] = useState('Morning'), [busy, setBusy] = useState(false), [analysis, setAnalysis] = useState(null), [collecting, setCollecting] = useState('');
+  const isAuthority = user?.role === 'authority';
+  const coordinate = value => value === '' || value == null ? null : Number(value);
+  async function addCamera(e) {
+    e.preventDefault(); setBusy(true); setAnalysis(null);
+    try {
+      const { line_y: lineY, ...fields } = registry;
+      await api('/api/cameras', { method: 'POST', body: JSON.stringify({ ...fields, latitude: coordinate(fields.latitude), longitude: coordinate(fields.longitude), stream_url: fields.stream_url.trim() || null,
+        collection_interval_seconds: Number(fields.collection_interval_seconds), sample_seconds: Number(fields.sample_seconds),
+        counting_line: lineY === '' ? null : [[0, Number(lineY)], [1, Number(lineY)]] }) });
+      setRegistry(blank); setEditingCamera(''); await refresh();
+      setToast('Camera details saved. Approved, online cameras can be used for clip review and stream collection.');
+    } catch (err) { setAnalysis({ error: err.message }); } finally { setBusy(false); }
+  }
+  async function analyze(e) {
+    e.preventDefault(); setAnalysis(null);
+    if (!cameraId) { setAnalysis({ error: 'Choose an approved camera source first.' }); return; }
+    if (!file) { setAnalysis({ error: 'Choose a video clip first.' }); return; }
+    setBusy(true);
+    try {
+      const body = new FormData(); body.append('video', file); body.append('observed_date', dateValue); body.append('time_block', block);
+      const result = await api(`/api/cameras/${encodeURIComponent(cameraId)}/analyze-video`, { method: 'POST', body });
+      setAnalysis(result); await refresh(); setToast('Footage reviewed and saved for authority follow-up.');
+    } catch (err) {
+      const message = err.message || '';
+      setAnalysis({ error: /401|token|sign.?in/i.test(message) ? 'Your authority sign-in may have expired. Sign in again, then retry.' : /YOLO|ultralytics|OpenCV/i.test(message) ? 'Video review is not ready on this computer. Please ask the project administrator for help.' : message });
+    } finally { setBusy(false); }
+  }
+  async function collect(camera) {
+    setCollecting(camera.camera_id);
+    try { const r = await api(`/api/cameras/${encodeURIComponent(camera.camera_id)}/collect`, { method: 'POST' }); setToast(r.ok ? `Measured ${r.tracked_vehicles} vehicles${r.line_crossings != null ? `, ${r.line_crossings} crossed the line` : ''}.` : `Collection failed: ${r.error}`); await refresh(); }
+    catch (err) { setToast(err.message); } finally { setCollecting(''); }
+  }
+  const eligible = data.cameras.filter(x => x.authorization_status === 'approved' && x.operational_status === 'online' && x.area && x.road);
+  const edit = id => {
+    const cam = data.cameras.find(x => x.camera_id === id);
+    setEditingCamera(id);
+    if (cam) setRegistry({ camera_id: cam.camera_id, display_name: cam.display_name, area: cam.area || '', road: cam.road || '', latitude: cam.latitude ?? '', longitude: cam.longitude ?? '', source_type: cam.source_type, authorization_status: cam.authorization_status, operational_status: cam.operational_status, stream_url: '', collection_interval_seconds: cam.collection_interval_seconds || 300, sample_seconds: cam.sample_seconds || 20, line_y: cam.counting_line ? cam.counting_line[0][1] : '' });
+    else setRegistry(blank);
+  };
+  const set = (key, value) => setRegistry({ ...registry, [key]: value });
+  return <><PageHeading eyebrow="CAMERA SOURCES" title="CCTV review and live streams" subtitle="Register authorized cameras. Review uploaded clips, or let approved streams be sampled automatically." action={<span className={`pill ${isAuthority ? 'pill-neutral' : 'pill-warn'}`}><ShieldCheck size={14} />{isAuthority ? 'AUTHORITY ACCESS' : 'AUTHORITY SIGN-IN REQUIRED'}</span>} />
+    <div className="model-warning"><AlertTriangle size={19} /><span><b>Measurements are estimates.</b> Counts come from vehicle detection and tracking; flow needs a counting line. Stream video is analysed and not stored. Use only feeds your authority is permitted to use.</span></div>
+    <div className="camera-grid"><section className="card form-card"><div className="card-heading"><div><h2>Camera registry</h2><p>Location, approval, and optional live stream.</p></div><Camera size={19} className="muted-icon" /></div>
+      <form className="incident-form" onSubmit={addCamera}>{data.cameras.length > 0 && <label>Update an existing camera<select value={editingCamera} onChange={e => edit(e.target.value)}><option value="">Add a new camera</option>{data.cameras.map(cam => <option key={cam.camera_id} value={cam.camera_id}>{cam.display_name} · {cam.road || 'road not set'}</option>)}</select></label>}
+        <div className="form-pair"><label>Camera ID<input required minLength="2" maxLength="80" value={registry.camera_id} onChange={e => set('camera_id', e.target.value)} placeholder="e.g. cam-jayanagar-01" /></label><label>Display name<input required minLength="2" value={registry.display_name} onChange={e => set('display_name', e.target.value)} placeholder="Jayanagar junction" /></label></div>
+        <div className="form-pair"><label>Area<input required value={registry.area} onChange={e => set('area', e.target.value)} /></label><label>Road<input required value={registry.road} onChange={e => set('road', e.target.value)} /></label></div>
+        <div className="form-pair"><label>Latitude <small>optional</small><input type="number" step="any" min="-90" max="90" required={registry.longitude !== ''} value={registry.latitude} onChange={e => set('latitude', e.target.value)} placeholder="12.9716" /></label><label>Longitude <small>optional</small><input type="number" step="any" min="-180" max="180" required={registry.latitude !== ''} value={registry.longitude} onChange={e => set('longitude', e.target.value)} placeholder="77.5946" /></label></div>
+        <div className="form-pair"><label>Source type<select value={registry.source_type} onChange={e => set('source_type', e.target.value)}>{[['authorized_cctv', 'Authorized CCTV'], ['approved_ip_camera', 'Approved IP camera'], ['permitted_integration', 'Permitted integration']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>Authorization<select value={registry.authorization_status} onChange={e => set('authorization_status', e.target.value)}><option value="pending">Pending review</option><option value="approved">Approved</option><option value="revoked">Revoked</option></select></label></div>
+        <label>Operational status<select value={registry.operational_status} onChange={e => set('operational_status', e.target.value)}><option value="unknown">Unknown</option><option value="online">Online</option><option value="offline">Offline</option></select></label>
+        <label>Stream address <small>{editingCamera ? 'leave empty to keep the saved address' : 'optional: rtsp://, http(s)://'}</small><input value={registry.stream_url} onChange={e => set('stream_url', e.target.value)} placeholder="rtsp://camera.example/stream" /></label>
+        <div className="form-pair"><label>Sample every<select value={registry.collection_interval_seconds} onChange={e => set('collection_interval_seconds', e.target.value)}><option value={60}>1 minute</option><option value={300}>5 minutes</option><option value={900}>15 minutes</option></select></label><label>Seconds per sample<input type="number" min="5" max="120" value={registry.sample_seconds} onChange={e => set('sample_seconds', e.target.value)} /></label></div>
+        <label>Counting line <small>horizontal line height, 0 (top) to 1 (bottom); empty = no flow estimate</small><input type="number" min="0" max="1" step="0.05" value={registry.line_y} onChange={e => set('line_y', e.target.value)} placeholder="0.6" /></label>
+        <button className="button button-primary" disabled={busy || !isAuthority}><Plus size={15} />{editingCamera ? 'Save camera changes' : 'Save camera source'}</button></form></section>
+      <section className="card form-card"><div className="card-heading"><div><h2>Review a video clip</h2><p>Count vehicles in an authorized recording.</p></div><Video size={19} className="muted-icon" /></div>{eligible.length === 0 && <div className="inline-error">No camera is ready yet. Save a camera with an area and road, set it to Approved and Online, then refresh.</div>}
+        <form className="incident-form" onSubmit={analyze}><label>Approved camera source<select value={cameraId} onChange={e => setCameraId(e.target.value)}><option value="">Choose an approved camera</option>{eligible.map(x => <option value={x.camera_id} key={x.camera_id}>{x.display_name} · {x.road}</option>)}</select></label><label>Video clip<input type="file" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" onChange={e => setFile(e.target.files?.[0] || null)} /><small>MP4, AVI, MOV, or MKV. Maximum size: 100 MB.</small></label>
+          <div className="form-pair"><label>Observation date<input type="date" required value={dateValue} onChange={e => setDateValue(e.target.value)} /></label><label>Time of day<select value={block} onChange={e => setBlock(e.target.value)}>{BLOCKS.map(x => <option key={x}>{x}</option>)}</select></label></div>
+          <button className="button button-primary" disabled={busy || !isAuthority || !eligible.length}><Video size={15} />{busy ? 'Reviewing clip…' : 'Review and save clip'}</button></form>
+        {analysis && <div className={analysis.error ? 'inline-error' : 'result-card'}>{analysis.error || <><span className="result-icon"><Camera size={18} /></span><div className="result-main"><small>VIDEO REVIEW · ESTIMATE</small><b>{analysis.analysis.clip_vehicle_count_estimate} vehicles seen</b><p>{analysis.analysis.sampled_frames} frames reviewed{analysis.analysis.clip_fully_analyzed === false ? ` (only the first ${analysis.analysis.analyzed_seconds} s of ${analysis.analysis.clip_seconds ?? '?'} s were analysed)` : ''}. This is an unverified estimate.</p><small>Review reference #{analysis.observation_id}</small></div></>}</div>}</section></div>
+    <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Registered cameras</h2><p>Only approved, online cameras are sampled or used for review.</p></div><span className="pill pill-neutral">{data.cameras.length} ENTRIES</span></div>
+      {data.cameras.length ? <div className="table-wrap"><table><thead><tr><th>Name</th><th>Area / road</th><th>Authorization</th><th>Operation</th><th>Stream</th><th>Last measurement</th><th /></tr></thead><tbody>{data.cameras.map(cam => <tr key={cam.camera_id}>
+        <td className="road-name">{cam.display_name}<small className="table-sub">{cam.camera_id}</small></td><td>{[cam.area, cam.road].filter(Boolean).join(' · ') || 'Not assigned'}</td>
+        <td><span className={`status-chip ${cam.authorization_status === 'approved' ? 'status-green' : cam.authorization_status === 'revoked' ? 'status-orange' : 'status-gray'}`}><i />{cam.authorization_status}</span></td>
+        <td>{cam.operational_status}{cam.consecutive_failures ? <small className="table-sub">{cam.consecutive_failures} failed attempts{cam.last_error ? `: ${cam.last_error}` : ''}</small> : null}</td>
+        <td>{cam.has_stream ? `every ${Math.round((cam.collection_interval_seconds || 300) / 60)} min${cam.counting_line ? ' · counting line' : ''}` : '—'}</td><td>{dateTime(cam.last_success_at)}</td>
+        <td>{cam.has_stream && cam.authorization_status === 'approved' && cam.operational_status === 'online' && <button className="text-action" disabled={collecting === cam.camera_id} onClick={() => collect(cam)}>{collecting === cam.camera_id ? 'Sampling…' : 'Collect now'}</button>}</td></tr>)}</tbody></table></div>
+        : <div className="empty-state"><span><Camera size={23} /></span><b>No camera sources registered</b><small>Authority approval is required before camera data can be accepted.</small></div>}</section>
+    <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Saved CCTV footage</h2><p>Uploaded clips are deleted after the retention period; their analysis is kept.</p></div><span className="pill pill-neutral">{data.footage?.length || 0} CLIPS</span></div>{data.footage?.length ? <div className="footage-grid">{data.footage.map(clip => <FootageClip key={clip.footage_id} clip={clip} />)}</div> : <div className="empty-state"><span><Video size={23} /></span><b>No footage uploaded yet</b><small>Analyze an authorized clip above to save it for review.</small></div>}</section>
   </>;
 }
 
-function Predict({ data, setToast }) {
-  const [form,setForm]=useState({'Area Name':'','Road/Intersection Name':'','Weather Conditions':'Clear','Roadwork and Construction Activity':'No','TimeBlock':'Morning','Traffic Volume':'','Average Speed':'','Travel Time Index':'','Incident Reports':'0'});
-  const [result,setResult]=useState(null);const [loading,setLoading]=useState(false);const [history,setHistory]=useState(null);const [historyForm,setHistoryForm]=useState({area:'',road:''});
-  const areas=useMemo(()=>[...new Set(data.coverage.map(x=>x.area))].sort(),[data.coverage]);
-  function setField(key,value){setForm(prev=>({...prev,[key]:value}));}
-  async function submit(e){e.preventDefault();setLoading(true);setResult(null);try{const payload={...form,Date:new Date().toISOString().slice(0,10)};for(const k of ['Traffic Volume','Average Speed','Travel Time Index','Incident Reports'])payload[k]=payload[k]===''?null:Number(payload[k]);const r=await api('/api/predict',{method:'POST',body:JSON.stringify(payload)});setResult(r);setToast('Forecast added to prediction history.');}catch(err){setResult({error:err.message});}finally{setLoading(false);}}
-  async function sequence(e){e.preventDefault();setLoading(true);setHistory(null);try{const r=await api(`/api/predict/history?area=${encodeURIComponent(historyForm.area)}&road=${encodeURIComponent(historyForm.road)}`,{method:'POST'});setHistory(r);setToast('Six-record historical sequence forecast generated.');}catch(err){setHistory({error:err.message});}finally{setLoading(false);}}
-  return <><PageHeading eyebrow="MACHINE LEARNING" title="Congestion forecast" subtitle="Run research models and review their held-out performance." action={<span className="pill pill-warn"><Sparkles size={14}/> Experimental models</span>}/>
-    <div className="model-warning"><AlertTriangle size={19}/><span><b>Research outputs only.</b> The dataset is historical and unverified. LSTM scored below the majority baseline; neither model should inform live route or safety decisions.</span></div>
-    <div className="predict-grid"><section className="card form-card"><div className="card-heading"><div><h2>Next time-block estimate</h2><p>Random Forest · provide current conditions for a road</p></div><span className="pill pill-neutral">RANDOM FOREST</span></div><form className="form-grid" onSubmit={submit}>
-      <label>Area<select required value={form['Area Name']} onChange={e=>setField('Area Name',e.target.value)}><option value="">Choose area</option>{areas.map(a=><option key={a}>{a}</option>)}{!areas.length&&<option>Indiranagar</option>}</select></label>
-      <label>Road / intersection<input required value={form['Road/Intersection Name']} onChange={e=>setField('Road/Intersection Name',e.target.value)} placeholder="e.g. 100 Feet Road" list="roads"/><datalist id="roads">{data.coverage.filter(x=>!form['Area Name']||x.area===form['Area Name']).map(x=><option key={x.road}>{x.road}</option>)}</datalist></label>
-      <label>Current time block<select value={form.TimeBlock} onChange={e=>setField('TimeBlock',e.target.value)}>{blocks.map(x=><option key={x}>{x}</option>)}</select></label>
-      <label>Weather<select value={form['Weather Conditions']} onChange={e=>setField('Weather Conditions',e.target.value)}>{['Clear','Cloudy','Rainy','Foggy','Unknown'].map(x=><option key={x}>{x}</option>)}</select></label>
-      <label>Roadwork<select value={form['Roadwork and Construction Activity']} onChange={e=>setField('Roadwork and Construction Activity',e.target.value)}>{['No','Yes','Unknown'].map(x=><option key={x}>{x}</option>)}</select></label>
-      <label>Incident reports<input type="number" min="0" value={form['Incident Reports']} onChange={e=>setField('Incident Reports',e.target.value)}/></label>
-      <label>Traffic volume <small>vehicles / block</small><input type="number" min="0" value={form['Traffic Volume']} onChange={e=>setField('Traffic Volume',e.target.value)} placeholder="Optional"/></label>
-      <label>Average speed <small>km/h</small><input type="number" min="0" max="250" value={form['Average Speed']} onChange={e=>setField('Average Speed',e.target.value)} placeholder="Optional"/></label>
-      <label>Travel time index<input type="number" min="0.01" step="0.01" value={form['Travel Time Index']} onChange={e=>setField('Travel Time Index',e.target.value)} placeholder="Optional"/></label>
-      <div className="form-submit"><button className="button button-primary" disabled={loading}><Sparkles size={16}/>{loading?'Calculating…':'Generate estimate'}</button><span>Target is the next available time block.</span></div>
-    </form>{result&&<ResultCard result={result}/>}</section>
-    <section className="card evaluation-card"><div className="card-heading"><div><h2>Model evaluation</h2><p>Chronological held-out test split</p></div><BarChart3 size={19} className="muted-icon"/></div><div className="eval-model"><div><span className="eval-label">LSTM · experimental</span><b>{data.lstm?`${(data.lstm.test_accuracy*100).toFixed(1)}%`:'—'}</b><small>Test accuracy</small></div><div><span className="eval-label">Majority baseline</span><b>{data.lstm?`${(data.lstm.baseline_test_accuracy*100).toFixed(1)}%`:'—'}</b><small>Always predicts most frequent class</small></div></div><div className="eval-line"><span>LSTM</span><div className="progress"><i style={{width:`${100*(data.lstm?.test_accuracy||0)}%`}}/></div><b>{data.lstm?`${(data.lstm.test_accuracy*100).toFixed(1)}%`:''}</b></div><div className="eval-line"><span>Baseline</span><div className="progress baseline"><i style={{width:`${100*(data.lstm?.baseline_test_accuracy||0)}%`}}/></div><b>{data.lstm?`${(data.lstm.baseline_test_accuracy*100).toFixed(1)}%`:''}</b></div><div className="evaluation-note"><ArrowDownRight size={16}/> Model currently trails the baseline. Do not deploy.</div><div className="eval-details"><span>Macro F1 score</span><b>{data.lstm?(data.lstm.test_macro_f1*100).toFixed(1)+'%':'—'}</b></div><div className="eval-details"><span>Sequence length</span><b>{data.lstm?.sequence_length||6} records</b></div><div className="eval-details"><span>Dataset split</span><b>Chronological</b></div><div className="eval-details"><span>RF macro F1</span><b>{data.model?.test_macro_f1?`${(data.model.test_macro_f1*100).toFixed(1)}%`:'—'}</b></div></section></div>
-    <section className="card sequence-card"><div className="card-heading"><div><h2>Forecast from historical sequence</h2><p>Uses six consecutive records already stored for one road.</p></div><Clock3 size={19} className="muted-icon"/></div><form className="sequence-form" onSubmit={sequence}><label>Area<select required value={historyForm.area} onChange={e=>{const area=e.target.value;setHistoryForm({area,road:data.coverage.find(x=>x.area===area)?.road||''});}}><option value="">Choose area</option>{areas.map(a=><option key={a}>{a}</option>)}</select></label><label>Road<select required value={historyForm.road} onChange={e=>setHistoryForm({...historyForm,road:e.target.value})}><option value="">Choose road</option>{data.coverage.filter(x=>!historyForm.area||x.area===historyForm.area).map(x=><option key={`${x.area}-${x.road}`}>{x.road}</option>)}</select></label><button className="button button-secondary" disabled={loading}><Activity size={16}/> Run LSTM estimate</button></form>{history&&<ResultCard result={history}/>}</section>
-  </>;
-}
-function ResultCard({result}) { if(result.error)return <div className="inline-error result-error">{result.error}</div>;return <div className="result-card"><span className="result-icon"><Sparkles size={18}/></span><div className="result-main"><small>PAST-RECORDS ESTIMATE</small><b>{result.predicted_traffic_situation}<span> · {shortDate(result.target_date)} {result.target_time_block}</span></b><p>{result.notice}</p></div><span className="result-tag">NOT VERIFIED</span></div>; }
-
-function CameraScreen({data,refresh,setToast,user}) {
-  const [registry,setRegistry]=useState({camera_id:'',display_name:'',area:'',road:'',source_type:'authorized_cctv',authorization_status:'pending',operational_status:'unknown'});
-  const [editingCamera,setEditingCamera]=useState('');
-  const [cameraId,setCameraId]=useState('');const [file,setFile]=useState(null);const [dateValue,setDateValue]=useState(new Date().toISOString().slice(0,10));const [block,setBlock]=useState('Morning');const [busy,setBusy]=useState(false);const [analysis,setAnalysis]=useState(null);
-  const isAuthority=user?.role==='authority';
-  async function addCamera(e){e.preventDefault();setBusy(true);setAnalysis(null);try{await api('/api/cameras',{method:'POST',body:JSON.stringify({...registry,latitude:null,longitude:null})});setRegistry({...registry,camera_id:'',display_name:'',area:'',road:'',authorization_status:'pending',operational_status:'unknown'});setEditingCamera('');await refresh();setToast('Camera details saved. Approved, online cameras can be used for clip review.');}catch(err){setAnalysis({error:err.message});}finally{setBusy(false);}}
-  async function analyze(e){e.preventDefault();setAnalysis(null);if(!isAuthority){setAnalysis({error:'Sign in with an authority account to review footage.'});return;}if(!cameraId){setAnalysis({error:'Choose an approved camera source first.'});return;}if(!file){setAnalysis({error:'Choose a video clip first.'});return;}setBusy(true);try{const body=new FormData();body.append('video',file);body.append('observed_date',dateValue);body.append('time_block',block);const result=await api(`/api/cameras/${encodeURIComponent(cameraId)}/analyze-video`,{method:'POST',body});setAnalysis(result);await refresh();setToast('Footage reviewed and saved for authority follow-up.');}catch(err){const message=err.message||'';setAnalysis({error:/401|token|sign.?in/i.test(message)?'Your authority sign-in may have expired. Sign in again, then retry.':/requirements-vision|YOLO|ultralytics|OpenCV/i.test(message)?'Video review is not ready on this computer. Please ask the project administrator for help.':message});}finally{setBusy(false);}}
-  const eligible=data.cameras.filter(x=>x.authorization_status==='approved'&&x.operational_status==='online'&&x.area&&x.road);
-  return <><PageHeading eyebrow="CAMERA FOOTAGE REVIEW" title="Review camera footage" subtitle="Add an authorized camera source, then review a saved video clip for the selected road." action={<span className={`pill ${isAuthority?'pill-neutral':'pill-warn'}`}><ShieldCheck size={14}/>{isAuthority?'AUTHORITY ACCESS':'AUTHORITY SIGN-IN REQUIRED'}</span>}/>
-    <div className="model-warning"><AlertTriangle size={19}/><span><b>Review estimate only.</b> The clip review counts vehicles visible in sampled parts of the video. It does not measure road speed or confirm live traffic. Upload only footage your authority is permitted to use.</span></div>
-    {!isAuthority&&<div className="inline-error">Sign in with the authority account configured for this project to change camera sources or review clips.</div>}
-    <div className="camera-grid"><section className="card form-card"><div className="card-heading"><div><h2>Camera registry</h2><p>Register an authorized camera source and its road location.</p></div><Camera size={19} className="muted-icon"/></div><form className="incident-form" onSubmit={addCamera}>{data.cameras.length>0&&<label>Update an existing camera<select value={editingCamera} onChange={e=>{const id=e.target.value;const cam=data.cameras.find(x=>x.camera_id===id);setEditingCamera(id);if(cam)setRegistry({camera_id:cam.camera_id,display_name:cam.display_name,area:cam.area||'',road:cam.road||'',source_type:cam.source_type,authorization_status:cam.authorization_status,operational_status:cam.operational_status});}}><option value="">Add a new camera</option>{data.cameras.map(cam=><option key={cam.camera_id} value={cam.camera_id}>{cam.display_name} · {cam.road||'road not set'}</option>)}</select></label>}<div className="form-pair"><label>Camera ID<input required minLength="2" maxLength="80" value={registry.camera_id} onChange={e=>setRegistry({...registry,camera_id:e.target.value})} placeholder="e.g. cam-jayanagar-01"/></label><label>Display name<input required minLength="2" value={registry.display_name} onChange={e=>setRegistry({...registry,display_name:e.target.value})} placeholder="Jayanagar junction"/></label></div><div className="form-pair"><label>Area<input required value={registry.area} onChange={e=>setRegistry({...registry,area:e.target.value})}/></label><label>Road<input required value={registry.road} onChange={e=>setRegistry({...registry,road:e.target.value})}/></label></div><div className="form-pair"><label>Source type<select value={registry.source_type} onChange={e=>setRegistry({...registry,source_type:e.target.value})}>{[['authorized_cctv','Authorized CCTV'],['approved_ip_camera','Approved IP camera'],['permitted_integration','Permitted integration']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><label>Authorization<select value={registry.authorization_status} onChange={e=>setRegistry({...registry,authorization_status:e.target.value})}><option value="pending">Pending review</option><option value="approved">Approved</option><option value="revoked">Revoked</option></select></label></div><label>Operational status<select value={registry.operational_status} onChange={e=>setRegistry({...registry,operational_status:e.target.value})}><option value="unknown">Unknown</option><option value="online">Online</option><option value="offline">Offline</option></select></label><button className="button button-primary" disabled={busy||!isAuthority}><Plus size={15}/>{editingCamera?"Save camera changes":"Save camera source"}</button></form></section>
-      <section className="card form-card"><div className="card-heading"><div><h2>Review a video clip</h2><p>Count vehicles visible in the selected recording.</p></div><Video size={19} className="muted-icon"/></div>{eligible.length===0&&<div className="inline-error">No camera is ready yet. Save a camera source with an area and road, set its approval to Approved and status to Online, then refresh this page.</div>}<form className="incident-form" onSubmit={analyze}><label>Approved camera source<select value={cameraId} onChange={e=>setCameraId(e.target.value)}><option value="">Choose an approved camera</option>{eligible.map(x=><option value={x.camera_id} key={x.camera_id}>{x.display_name} · {x.road}</option>)}</select></label><label>Video clip<input type="file" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" onChange={e=>setFile(e.target.files?.[0]||null)}/><small>MP4, AVI, MOV, or MKV. Maximum size: 100 MB.</small></label><div className="form-pair"><label>Observation date<input type="date" required value={dateValue} onChange={e=>setDateValue(e.target.value)}/></label><label>Time of day<select value={block} onChange={e=>setBlock(e.target.value)}>{blocks.map(x=><option key={x}>{x}</option>)}</select></label></div><button className="button button-primary" disabled={busy||!isAuthority||!eligible.length}><Video size={15}/>{busy?'Reviewing clip…':'Review and save clip'}</button><span className="form-hint">Choose a camera and video clip to enable review.</span></form>{analysis&&<div className={analysis.error?'inline-error':'result-card'}>{analysis.error||<><span className="result-icon"><Camera size={18}/></span><div className="result-main"><small>VIDEO REVIEW · ESTIMATE</small><b>{analysis.analysis.clip_vehicle_count_estimate} vehicles seen</b><p>{analysis.analysis.sampled_frames} parts of the clip reviewed. This is an unverified estimate.</p><small>Review reference #{analysis.observation_id}</small></div></>}</div>}</section></div>
-    <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Saved CCTV footage</h2><p>Clip playback is available only in this signed-in authority session.</p></div><span className="pill pill-neutral">{data.footage?.length||0} CLIPS</span></div>{data.footage?.length?<div className="footage-grid">{data.footage.map(clip=><FootageClip key={clip.footage_id} clip={clip}/>)}</div>:<div className="empty-state"><span><Video size={23}/></span><b>No footage uploaded yet</b><small>Analyze an authorized clip above to save it for review.</small></div>}</section>
-    <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Registered cameras</h2><p>Sources remain unavailable for ingestion until approved and online.</p></div><span className="pill pill-neutral">{data.cameras.length} ENTRIES</span></div>{data.cameras.length?<div className="table-wrap"><table><thead><tr><th>Name</th><th>Area / road</th><th>Source</th><th>Authorization</th><th>Operation</th><th>Last analysis</th></tr></thead><tbody>{data.cameras.map(cam=><tr key={cam.camera_id}><td className="road-name">{cam.display_name}<small className="table-sub">{cam.camera_id}</small></td><td>{[cam.area,cam.road].filter(Boolean).join(' · ')||'Not assigned'}</td><td>{cam.source_type.replaceAll('_',' ')}</td><td><span className={`status-chip ${cam.authorization_status==='approved'?'status-green':cam.authorization_status==='revoked'?'status-orange':'status-gray'}`}><i/>{cam.authorization_status}</span></td><td>{cam.operational_status}</td><td>{cam.last_success_at?new Date(cam.last_success_at).toLocaleString('en-IN'):'—'}</td></tr>)}</tbody></table></div>:<div className="empty-state"><span><Camera size={23}/></span><b>No camera sources registered</b><small>Authority approval is required before camera data can be accepted.</small></div>}</section>
-  </>;
+function FootageClip({ clip }) {
+  const [src, setSrc] = useState(''), [loading, setLoading] = useState(false), [error, setError] = useState('');
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
+  async function play() {
+    if (src) return;
+    setLoading(true); setError('');
+    try {
+      const token = sessionStorage.getItem('flowstateToken');
+      const response = await fetch(`${API}/api/camera-footage/${encodeURIComponent(clip.footage_id)}/video`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!response.ok) throw new Error(response.status === 410 ? 'The video was deleted under the retention policy.' : 'Playback is available to an authorized authority account.');
+      setSrc(URL.createObjectURL(await response.blob()));
+    } catch (e) { setError(e.message); } finally { setLoading(false); }
+  }
+  let analysis = {};
+  try { analysis = typeof clip.analysis_json === 'string' ? JSON.parse(clip.analysis_json) : (clip.analysis_json || {}); } catch { /* keep empty */ }
+  return <article className="footage-card"><div className="footage-preview">{src ? <video controls preload="metadata" src={src} /> : <button onClick={play} disabled={loading || Boolean(clip.file_deleted_at)}><Video size={24} /><span>{clip.file_deleted_at ? 'Video deleted (retention)' : loading ? 'Loading clip…' : 'Load and play clip'}</span></button>}</div><div className="footage-details"><b>{clip.original_filename}</b><small>{clip.display_name} · {dateTime(clip.uploaded_at)}</small><span>{analysis.clip_vehicle_count_estimate ?? '—'} vehicles detected · unverified estimate</span>{error && <small className="inline-error">{error}</small>}</div></article>;
 }
 
-function FootageClip({clip}) {
-  const [src,setSrc]=useState(''),[loading,setLoading]=useState(false),[error,setError]=useState('');
-  useEffect(()=>()=>{if(src)URL.revokeObjectURL(src);},[src]);
-  async function play(){if(src)return;setLoading(true);setError('');try{const token=sessionStorage.getItem('flowstateToken');const response=await fetch(`${API}/api/camera-footage/${encodeURIComponent(clip.footage_id)}/video`,{headers:token?{Authorization:`Bearer ${token}`}:{}});if(!response.ok)throw new Error('Playback is available to an authorized authority account.');setSrc(URL.createObjectURL(await response.blob()));}catch(e){setError(e.message);}finally{setLoading(false);}}
-  let analysis={};try{analysis=typeof clip.analysis_json==='string'?JSON.parse(clip.analysis_json):(clip.analysis_json||{});}catch{}
-  return <article className="footage-card"><div className="footage-preview">{src?<video controls preload="metadata" src={src}/>:<button onClick={play} disabled={loading}><Video size={24}/><span>{loading?'Loading clip…':'Load and play clip'}</span></button>}</div><div className="footage-details"><b>{clip.original_filename}</b><small>{clip.display_name} · {new Date(clip.uploaded_at).toLocaleString('en-IN')}</small><span>{analysis.clip_vehicle_count_estimate??'—'} vehicles detected · unverified estimate</span>{error&&<small className="inline-error">{error}</small>}</div></article>;
+// ---------- citizen incident report ----------
+
+function Incidents({ setToast }) {
+  const [form, setForm] = useState({ category: 'heavy_traffic', description: '', area: '', road: '', latitude: null, longitude: null });
+  const [busy, setBusy] = useState(false), [locating, setLocating] = useState(false);
+  function captureLocation() {
+    if (!navigator.geolocation) { setToast('Location is unavailable in this browser.'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(p => { setForm(prev => ({ ...prev, latitude: p.coords.latitude, longitude: p.coords.longitude })); setLocating(false); },
+      () => { setToast('Location permission was not granted. You can still enter the area and road manually.'); setLocating(false); }, { enableHighAccuracy: false, timeout: 10000 });
+  }
+  async function submit(e) {
+    e.preventDefault(); setBusy(true);
+    try {
+      await api('/api/auth/me');
+      const payload = { ...form, area: form.area.trim() || null, road: form.road.trim() || null };
+      if (payload.latitude == null) { delete payload.latitude; delete payload.longitude; }
+      const result = await api('/api/incidents', { method: 'POST', body: JSON.stringify(payload) });
+      setForm({ ...form, description: '', latitude: null, longitude: null });
+      setToast(result.status === 'duplicate' ? result.message : 'Report sent. It will remain unverified until an authority reviews it.');
+    } catch (err) {
+      setToast(/401|expired|invalid account token|sign.?in/i.test(err.message) ? 'Your sign-in has expired. Please sign in again, then send your report.' : err.message);
+    } finally { setBusy(false); }
+  }
+  return <><PageHeading eyebrow="COMMUNITY ROAD REPORT" title="Report an incident" subtitle="Send a clear, factual report to the authority operations team." action={<span className="pill pill-neutral"><Users size={14} /> Community input</span>} />
+    <div className="incident-grid"><section className="card form-card"><div className="card-heading"><div><h2>What is happening?</h2><p>Location helps the authority find and assess the report.</p></div><Plus size={18} className="muted-icon" /></div>
+      <form className="incident-form" onSubmit={submit}><label>Incident type<select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>{CITIZEN_CATEGORIES.map(v => <option key={v} value={v}>{CATEGORY_LABELS[v]}</option>)}</select></label>
+        <div className="form-pair"><label>Area<input value={form.area} onChange={e => setForm({ ...form, area: e.target.value })} placeholder="e.g. Indiranagar" /></label><label>Road or junction<input value={form.road} onChange={e => setForm({ ...form, road: e.target.value })} placeholder="e.g. 100 Feet Road" /></label></div>
+        <button type="button" className="button button-secondary location-capture" onClick={captureLocation}><LocateFixed size={15} />{locating ? 'Finding your location…' : form.latitude != null ? 'Location attached' : 'Attach my current location'}</button>{form.latitude != null && <small className="coordinate-note">{form.latitude.toFixed(5)}, {form.longitude.toFixed(5)} · shared with this report</small>}
+        <label>Description<textarea required minLength="5" maxLength="1000" rows="4" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What did you observe? Avoid names or personal details." /></label>
+        <div className="form-submit"><button className="button button-primary" disabled={busy}><Plus size={16} />{busy ? 'Sending…' : 'Send report'}</button><span>An authority must verify before it can be broadcast.</span></div></form></section>
+      <section className="card report-list-card report-guidance"><span className="map-side-icon"><ShieldCheck size={19} /></span><div className="eyebrow">AFTER YOU REPORT</div><h2>What happens next?</h2><div className="guidance-step"><i>1</i><div><b>Operations receives it</b><small>Matching reports nearby are merged as confirmations.</small></div></div><div className="guidance-step"><i>2</i><div><b>An authority checks the details</b><small>It stays unverified until reviewed, and expires if left unreviewed.</small></div></div><div className="guidance-step"><i>3</i><div><b>Verified reports affect routes</b><small>They are used in route scores and may become a public alert.</small></div></div><div className="user-data-note"><ShieldCheck size={15} /><span>Please do not include personal information or submit while driving.</span></div></section></div></>;
 }
 
-function Incidents({data,refresh,setToast}) {
-  const [form,setForm]=useState({category:'heavy_traffic',description:'',area:'',road:'',latitude:null,longitude:null});const [busy,setBusy]=useState(false);const [locating,setLocating]=useState(false);
-  function captureLocation(){if(!navigator.geolocation){setToast('Location is unavailable in this browser.');return;}setLocating(true);navigator.geolocation.getCurrentPosition(p=>{setForm(prev=>({...prev,latitude:p.coords.latitude,longitude:p.coords.longitude}));setLocating(false);},()=>{setToast('Location permission was not granted. You can still enter the area and road manually.');setLocating(false);},{enableHighAccuracy:false,timeout:10000});}
-  async function submit(e){e.preventDefault();setBusy(true);try{await api('/api/auth/me');const payload={...form};if(payload.latitude==null){delete payload.latitude;delete payload.longitude;}await api('/api/incidents',{method:'POST',body:JSON.stringify(payload)});setForm({...form,description:'',latitude:null,longitude:null});await refresh();setToast('Report sent. It will remain unverified until an authority reviews it.');}catch(err){setToast(/401|expired|invalid account token|sign.?in/i.test(err.message)?'Your sign-in has expired. Please sign in again, then send your report.':err.message);}finally{setBusy(false);}}
-  return <><PageHeading eyebrow="COMMUNITY ROAD REPORT" title="Report an incident" subtitle="Send a clear, factual report to the authority operations team." action={<span className="pill pill-neutral"><Users size={14}/> Community input</span>}/><div className="incident-grid"><section className="card form-card"><div className="card-heading"><div><h2>What is happening?</h2><p>Location helps the authority find and assess the report.</p></div><Plus size={18} className="muted-icon"/></div><form className="incident-form" onSubmit={submit}><label>Incident type<select value={form.category} onChange={e=>setForm({...form,category:e.target.value})}>{[['heavy_traffic','Heavy traffic'],['accident','Accident'],['breakdown','Vehicle breakdown'],['road_blockage','Road blockage'],['construction','Construction'],['waterlogging','Waterlogging'],['signal_failure','Signal failure'],['diversion','Diversion'],['other','Other']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label><div className="form-pair"><label>Area<input value={form.area} onChange={e=>setForm({...form,area:e.target.value})} placeholder="e.g. Indiranagar"/></label><label>Road or junction<input value={form.road} onChange={e=>setForm({...form,road:e.target.value})} placeholder="e.g. 100 Feet Road"/></label></div><button type="button" className="button button-secondary location-capture" onClick={captureLocation}><LocateFixed size={15}/>{locating?'Finding your location…':form.latitude!=null?'Location attached':'Attach my current location'}</button>{form.latitude!=null&&<small className="coordinate-note">{form.latitude.toFixed(5)}, {form.longitude.toFixed(5)} · shared with this report</small>}<label>Description<textarea required minLength="5" maxLength="1000" rows="4" value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="What did you observe? Avoid names or personal details."/></label><div className="form-submit"><button className="button button-primary" disabled={busy}><Plus size={16}/>{busy?'Sending…':'Send report'}</button><span>An authority must verify before it can be broadcast.</span></div></form></section><section className="card report-list-card report-guidance"><span className="map-side-icon"><ShieldCheck size={19}/></span><div className="eyebrow">AFTER YOU REPORT</div><h2>What happens next?</h2><div className="guidance-step"><i>1</i><div><b>Operations receives it</b><small>Your description and optional location are added to the review queue.</small></div></div><div className="guidance-step"><i>2</i><div><b>An authority checks the details</b><small>It stays marked as unverified until reviewed.</small></div></div><div className="guidance-step"><i>3</i><div><b>Verified notices reach commuters</b><small>If useful, the authority may publish a city alert.</small></div></div><div className="user-data-note"><ShieldCheck size={15}/><span>Please do not upload personal information or submit while driving.</span></div></section></div></>;
-}
-function ReportItem({item}) {const labels={accident:'Accident',breakdown:'Breakdown',road_blockage:'Road blockage',heavy_traffic:'Heavy traffic',construction:'Construction',waterlogging:'Waterlogging',signal_failure:'Signal failure',diversion:'Diversion',other:'Other'};const Icon=item.category==='construction'?Construction:AlertTriangle;return <article className="report-item"><div className="report-icon"><Icon size={17}/></div><div className="report-content"><div className="report-title"><b>{labels[item.category]||item.category}</b><span className={`status-chip ${item.status==='verified'?'status-green':item.status==='resolved'?'status-blue':'status-orange'}`}><i/>{item.status}</span></div><p>{item.description}</p><div className="report-meta"><span><MapPin size={13}/>{[item.area,item.road].filter(Boolean).join(' · ')||'Location not supplied'}</span><span><Clock3 size={13}/>{new Date(item.created_at).toLocaleString('en-IN')}</span></div></div></article>; }
-
-function StartJourney({setToast}) {
-  const readPins=()=>{try{return JSON.parse(sessionStorage.getItem('flowstateJourneyPoints')||'{}');}catch{return {};}};const [pins,setPins]=useState(readPins);const [origin,setOrigin]=useState(''),[destination,setDestination]=useState(''),[places,setPlaces]=useState(null),[from,setFrom]=useState(pins.origin||null),[to,setTo]=useState(pins.destination||null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[weatherStatus,setWeatherStatus]=useState(''),[result,setResult]=useState(null);
-  async function find(e){e.preventDefault();setBusy(true);setError('');setResult(null);setPlaces(null);setFrom(null);setTo(null);try{const [a,b]=await Promise.all([pins.origin?Promise.resolve({results:[pins.origin]}):api(`/api/geocode?q=${encodeURIComponent(origin)}`),pins.destination?Promise.resolve({results:[pins.destination]}):api(`/api/geocode?q=${encodeURIComponent(destination)}`)]);if(!a.results?.length||!b.results?.length)throw new Error('Could not find both places. Add a Bengaluru area, street, or landmark.');setPlaces({origins:a.results,destinations:b.results});if(a.results.length===1)setFrom(a.results[0]);if(b.results.length===1)setTo(b.results[0]);if(a.results.length>1||b.results.length>1)setError('Choose the matching starting point and destination before comparing routes.');else await compare(a.results[0],b.results[0]);}catch(err){setError(err.message);}finally{setBusy(false);}}
-  async function compare(a=from,b=to){if(!a||!b){setError('Choose the matching starting point and destination first.');return;}setBusy(true);setError('');setResult(null);setWeatherStatus('Checking current weather…');try{await Promise.allSettled([api(`/api/weather/fetch?latitude=${encodeURIComponent(a.latitude)}&longitude=${encodeURIComponent(a.longitude)}`),api(`/api/weather/fetch?latitude=${encodeURIComponent(b.latitude)}&longitude=${encodeURIComponent(b.longitude)}`)]);const query=new URLSearchParams({origin_lat:a.latitude,origin_lon:a.longitude,destination_lat:b.latitude,destination_lon:b.longitude,departure_at:new Date().toISOString()});const routes=await api(`/api/routes?${query}`);setWeatherStatus(routes.weather_status==='provider_forecast_used'?'Weather was included in this route estimate.':'Weather is unavailable; this estimate uses the route and verified reports only.');setResult({routes,origin:a,destination:b});if(!routes.routes?.length)setError('The route service did not return a route for those places.');}catch(err){setError(err.message);setWeatherStatus('Weather could not be confirmed.');}finally{setBusy(false);}}
-  const best=result?.routes?.routes?.[0];
-  return <><PageHeading eyebrow="JOURNEY START" title="Find a route to go now" subtitle="Confirm both places before comparing travel estimates and nearby verified reports."/><div className="journey-grid start-journey-grid"><section className="card form-card"><div className="card-heading"><div><h2>Where are you going?</h2><p>Enter Bengaluru areas, addresses or landmarks.</p></div><Navigation size={19} className="muted-icon"/></div><form className="journey-form" onSubmit={find}><label>Starting point<input required minLength="3" value={pins.origin?.label||origin} onChange={e=>{setPins(p=>({...p,origin:null}));const next={...pins,origin:null};sessionStorage.setItem('flowstateJourneyPoints',JSON.stringify(next));setOrigin(e.target.value);setPlaces(null);setFrom(null);setResult(null);}} placeholder="e.g. Majestic bus station"/></label>{places?.origins.length>1&&<label>Choose starting point<select value={from?String(places.origins.indexOf(from)):''} onChange={e=>setFrom(places.origins[Number(e.target.value)]||null)}><option value="">Select the correct place</option>{places.origins.map((p,i)=><option key={`${p.latitude}-${p.longitude}-${i}`} value={i}>{p.display_name}</option>)}</select></label>}<label>Destination<input required minLength="3" value={pins.destination?.label||destination} onChange={e=>{setPins(p=>({...p,destination:null}));const next={...pins,destination:null};sessionStorage.setItem('flowstateJourneyPoints',JSON.stringify(next));setDestination(e.target.value);setPlaces(null);setTo(null);setResult(null);}} placeholder="e.g. Indiranagar, Bengaluru"/></label>{places?.destinations.length>1&&<label>Choose destination<select value={to?String(places.destinations.indexOf(to)):''} onChange={e=>setTo(places.destinations[Number(e.target.value)]||null)}><option value="">Select the correct place</option>{places.destinations.map((p,i)=><option key={`${p.latitude}-${p.longitude}-${i}`} value={i}>{p.display_name}</option>)}</select></label>}<button className="button button-primary" disabled={busy}><Route size={16}/>{busy?'Checking…':'Find matching places'}</button>{places&&<button type="button" className="button button-primary" disabled={busy||!from||!to} onClick={()=>compare()}><Route size={16}/>{busy?'Preparing route…':'Compare routes'}</button>}<small className="form-hint">Confirm the suggested places before routing. Travel times are estimates, not live speed readings.</small></form>{error&&<div className="inline-error">{error}</div>}</section><section className="card journey-info start-route-info"><div className="route-illustration"><div className="route-node origin-node"><MapPin size={17}/></div><div className="route-dash"/><div className="route-node destination-node"><LocateFixed size={17}/></div></div><h2>{best?'Your route options':'A route, with useful context'}</h2><p>{best?`${(result.origin.display_name||result.origin.label||'Starting point').split(',').slice(0,2).join(',')} → ${(result.destination.display_name||result.destination.label||'Destination').split(',').slice(0,2).join(',')}`:'Confirm both places, then compare routes and reports.'}</p>{weatherStatus&&<div className="map-stat"><span>Weather</span><b>{weatherStatus}</b></div>}{best&&<div className="route-option"><div><b>{Math.round(best.baseline_duration_s/60)} min · {(best.distance_m/1000).toFixed(1)} km</b><small>Estimate uses route, available weather and verified reports.</small></div><span className="pill pill-neutral">IMPACT {best.risk_score}</span></div>}</section></div>{result?.routes?.routes?.length>0&&<><div className="card route-results-map"><RoutePreviewMap routes={result.routes.routes}/><div className="map-overlay"><MapPin size={14}/> Route estimate · verified incidents only</div></div><section className="route-choice-list">{result.routes.routes.map((route,index)=><article className="card route-choice" key={route.route_index}><span className={`route-rank ${index===0?'route-rank-best':''}`}>{index===0?<Check size={16}/>:index+1}</span><div className="route-choice-main"><b>{Math.round(route.baseline_duration_s/60)} min <small>· {(route.distance_m/1000).toFixed(1)} km</small></b><span>{route.nearby_verified_incidents.length?`${route.nearby_verified_incidents.length} verified incident${route.nearby_verified_incidents.length===1?'':'s'} near route`:'No nearby verified reports in the project data'}</span></div><div className="route-score"><small>ROUTE IMPACT</small><b>{route.risk_score}/100</b></div></article>)}</section><div className="route-notice"><AlertTriangle size={15}/>Google traffic-aware route estimate when available. <b>Confirm conditions before traveling.</b></div></>}</>;
-}
-
-function RoutePreviewMap({routes}) {
-  const containerRef=useRef(null),linesRef=useRef([]);const {map,mapRef,mapError}=useGoogleMap(containerRef,12);
-  useEffect(()=>{if(!map)return;linesRef.current.forEach(line=>line.setMap(null));linesRef.current=routes.map((route,index)=>new window.google.maps.Polyline({map,path:(route.geometry?.coordinates||[]).map(([lng,lat])=>({lat,lng})),geodesic:true,strokeColor:index===0?'#087e83':'#90aaa6',strokeOpacity:index===0?.9:.55,strokeWeight:index===0?6:4}));const points=routes[0]?.geometry?.coordinates||[];if(points.length){const bounds=new window.google.maps.LatLngBounds();points.forEach(([lng,lat])=>bounds.extend({lat,lng}));map.fitBounds(bounds,32);}return()=>linesRef.current.forEach(line=>line.setMap(null));},[map,routes]);
-  return <><div className="route-map" id="journey-route-map" ref={containerRef}/><MapSetupNotice message={mapError}/></>;
-}
-
-function Journeys({setToast}) {
-  const [form,setForm]=useState({origin:'',destination:'',departure_at:''});const [trip,setTrip]=useState(null);const [routes,setRoutes]=useState(null);const [busy,setBusy]=useState(false);
-  async function submit(e){e.preventDefault();setBusy(true);setTrip(null);setRoutes(null);try{const departure=new Date(form.departure_at).toISOString();const created=await api('/api/trips',{method:'POST',body:JSON.stringify({...form,departure_at:departure})});setTrip(created);setToast('Planned journey saved privately. Keep the owner token to manage it.');}catch(err){setToast(err.message);}finally{setBusy(false);}}
-  return <><PageHeading eyebrow="JOURNEY PLANNING" title="Plan a journey" subtitle="Save a future trip privately." action={<span className="pill pill-neutral"><ShieldCheck size={14}/> Private trip details</span>}/><div className="journey-grid"><section className="card form-card"><div className="card-heading"><div><h2>Trip details</h2><p>Your individual journey is not shown publicly.</p></div><Navigation size={19} className="muted-icon"/></div><form className="journey-form" onSubmit={submit}><label>Starting point<input required minLength="2" value={form.origin} onChange={e=>setForm({...form,origin:e.target.value})} placeholder="Search an area or landmark"/></label><label>Destination<input required minLength="2" value={form.destination} onChange={e=>setForm({...form,destination:e.target.value})} placeholder="Where are you going?"/></label><label>Departure date and time<input required type="datetime-local" value={form.departure_at} onChange={e=>setForm({...form,departure_at:e.target.value})}/></label><button className="button button-primary" disabled={busy}><Route size={16}/>{busy?'Saving…':'Save planned journey'}</button></form></section><section className="card journey-info"><div className="route-illustration"><div className="route-node origin-node"><MapPin size={17}/></div><div className="route-dash"/><div className="route-node destination-node"><LocateFixed size={17}/></div></div><h2>Journey details</h2><p>To compare routes and check current weather, use “Start a journey” and confirm the suggested places before continuing.</p>{trip&&<div className="owner-token"><b>Journey saved</b><span>Save this private reference if you need to cancel the journey.</span><code>{trip.owner_token}</code><small>This reference is shown once.</small></div>}</section></div></>;
+function ReportItem({ item }) {
+  const Icon = item.category === 'construction' || item.category === 'metro_construction' ? Construction : AlertTriangle;
+  return <article className="report-item"><div className="report-icon"><Icon size={17} /></div><div className="report-content"><div className="report-title"><b>{CATEGORY_LABELS[item.category] || item.category}</b><span className={`status-chip ${item.status === 'verified' ? 'status-green' : item.status === 'resolved' ? 'status-blue' : item.status === 'stale' ? 'status-gray' : 'status-orange'}`}><i />{item.status}</span>{item.official ? <span className="status-chip status-blue"><i />official</span> : null}{item.corroboration_count ? <span className="status-chip status-gray"><i />{item.corroboration_count} confirmation{item.corroboration_count === 1 ? '' : 's'}</span> : null}</div>
+    <p>{item.description}</p><div className="report-meta"><span><MapPin size={13} />{[item.area, item.road].filter(Boolean).join(' · ') || (item.latitude != null ? `${Number(item.latitude).toFixed(4)}, ${Number(item.longitude).toFixed(4)}` : 'Location not supplied')}</span><span><Clock3 size={13} />{dateTime(item.created_at)}</span>{item.status === 'verified' && item.expires_at && <span>Valid until {dateTime(item.expires_at)}</span>}</div>{item.official_note && <p><b>Official note:</b> {item.official_note}</p>}</div></article>;
 }
 
 export default App;

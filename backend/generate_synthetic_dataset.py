@@ -6,16 +6,16 @@ imported into historical observations or model training automatically.
 from __future__ import annotations
 
 import json
-import zipfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "data" / "bangalore_traffic_timely_dataset.zip"
-OUTPUT = ROOT / "data" / "synthetic_traffic_dataset.csv"
-MANIFEST = ROOT / "data" / "synthetic_traffic_dataset_manifest.json"
+from core import DATA_DIR
+from dataset import load_training_frame
+
+ARCHIVE = DATA_DIR / "bangalore_traffic_timely_dataset.zip"
+OUTPUT = DATA_DIR / "synthetic_traffic_dataset.csv"
+MANIFEST = DATA_DIR / "synthetic_traffic_dataset_manifest.json"
 BLOCKS = ["Midnight", "Morning", "Daytime", "Noon", "Evening", "Night"]
 SEED = 20261021
 
@@ -23,14 +23,10 @@ SEED = 20261021
 def main() -> None:
     if not ARCHIVE.exists():
         raise SystemExit(f"Reference dataset copy not found: {ARCHIVE}")
-    with zipfile.ZipFile(ARCHIVE) as archive:
-        csv_name = next(name for name in archive.namelist() if name.lower().endswith(".csv"))
-        with archive.open(csv_name) as raw:
-            source = pd.read_csv(raw)
+    # Invalid and duplicate rows are excluded with the same rules as the importer.
+    source, _ = load_training_frame(ARCHIVE)
 
     rng = np.random.default_rng(SEED)
-    source["Date"] = pd.to_datetime(source["Date"], errors="coerce")
-    source = source.dropna(subset=["Date", "Area Name", "Road/Intersection Name"])
     segments = source[["Area Name", "Road/Intersection Name"]].drop_duplicates().reset_index(drop=True)
     # Add one simulated year after the observed archive; avoid invented future dates.
     dates = pd.date_range("2025-01-01", "2025-12-31", freq="D")

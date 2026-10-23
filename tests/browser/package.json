@@ -1,0 +1,11 @@
+{
+  "name": "flowstate-browser-tests",
+  "private": true,
+  "description": "Browser tests for the FlowState website (run against a test server with fake data).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

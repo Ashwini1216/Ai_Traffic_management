@@ -9,6 +9,7 @@ passlib[bcrypt]>=1.7.4
 bcrypt>=4.0,<4.1
 python-multipart>=0.0.9
 python-dotenv>=1.0
+certifi>=2024.2.2
 
 # Database and data processing
 SQLAlchemy>=2.0,<3
@@ -19,7 +20,10 @@ numpy>=1.26
 # Machine learning and model persistence
 scikit-learn>=1.6,<2
 joblib>=1.4
-tensorflow-cpu>=2.18,<2.22
+# tensorflow-cpu is published only for Windows and Linux. macOS (Apple Silicon)
+# uses the standard tensorflow package, which also runs on the CPU there.
+tensorflow-cpu>=2.18,<2.22; sys_platform != "darwin"
+tensorflow>=2.18,<2.22; sys_platform == "darwin"
 
 # Computer vision and uploaded video analysis
 ultralytics>=8.3
