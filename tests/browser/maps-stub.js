@@ -25,8 +25,15 @@
     constructor(o) { super(); this.opts = o; this.map = o.map; }
     setMap(m) { this.map = m; }
   }
-  class Marker extends Overlay { constructor(o) { super(o); window.__markers.push(this); } }
-  class Circle extends Overlay { constructor(o) { super(o); window.__circles.push(this); } }
+  class Marker extends Overlay {
+    constructor(o) { super(o); window.__markers.push(this); }
+    setPosition(p) { this.opts.position = p; }
+  }
+  class Circle extends Overlay {
+    constructor(o) { super(o); window.__circles.push(this); }
+    setCenter(c) { this.opts.center = c; }
+    setRadius(r) { this.opts.radius = r; }
+  }
   class Polyline extends Overlay { constructor(o) { super(o); window.__polylines.push(this); } }
   class InfoWindow {
     constructor(o) {

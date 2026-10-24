@@ -21,8 +21,9 @@ import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -37,13 +38,15 @@ import forecasting
 import incidents
 import notifications
 import observations
+import places
 import routing
 import scheduler
 import segments
 import store
 import weather
 from core import DATA_DIR, ROOT, iso_now
-from security import PASSWORDS, _decode_bearer, authority_token, create_access_token, signed_in_user
+from security import (AUTHORITY_PASSWORD_MIN, PASSWORDS, _decode_bearer, authority_token, check_sign_in_allowed,
+                      create_access_token, record_sign_in, sign_in_limits, signed_in_user, verify_password)
 
 SYNTHETIC_MANIFEST_FILE = DATA_DIR / "synthetic_traffic_dataset_manifest.json"
 # FLOWSTATE_FRONTEND_DIST lets the browser tests serve their own build without touching frontend/dist.
@@ -61,6 +64,8 @@ def startup() -> None:
         return
     username = username.casefold()
     existing = store.one("SELECT username,email FROM user_accounts WHERE username=?", (username,))
+    if not existing and len(password) < AUTHORITY_PASSWORD_MIN:
+        raise RuntimeError(f"AUTHORITY_PASSWORD in .env must be at least {AUTHORITY_PASSWORD_MIN} characters long.")
     taken = bool(email and store.one("SELECT username FROM user_accounts WHERE email=? AND username<>?", (email, username)))
     with store.connect() as db:
         if not existing:
@@ -124,6 +129,13 @@ class LoginInput(BaseModel):
     email: str | None = Field(default=None, max_length=254)
     username: str | None = Field(default=None, max_length=40)
     password: str = Field(min_length=1, max_length=128)
+    # The portal being signed in to: the authority sign-in never gives a token to a commuter account.
+    portal: Literal["citizen", "authority"] | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
 
 
 def _username_from_email(email: str) -> str:
@@ -138,7 +150,8 @@ def _username_from_email(email: str) -> str:
 
 
 def _signed_in(account: dict) -> dict:
-    return {"access_token": create_access_token(account["username"], account["role"]), "token_type": "bearer", "expires_in": 43200,
+    token = create_access_token(account["username"], account["role"], account.get("token_version") or 0)
+    return {"access_token": token, "token_type": "bearer", "expires_in": 43200,
             "user": {"username": account["username"], "email": account["email"], "role": account["role"]}}
 
 
@@ -156,45 +169,86 @@ def register_account(payload: RegisterInput):
     return _signed_in(account)
 
 
+def _client_address(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
 @app.post("/api/auth/login")
-def login_account(payload: LoginInput):
+def login_account(payload: LoginInput, request: Request):
     identifier = (payload.email or payload.username or "").strip().casefold()
     if not identifier:
         raise HTTPException(422, "Enter your email address.")
     column = "email" if "@" in identifier else "username"
-    account = store.one(f"SELECT username,email,password_hash,role FROM user_accounts WHERE {column}=?", (identifier,))
-    if not account or not PASSWORDS.verify(payload.password, account["password_hash"]):
+    account = store.one(f"SELECT username,email,password_hash,role,token_version FROM user_accounts WHERE {column}=?", (identifier,))
+    # Wrong passwords count against the account, whether its email or its username was typed.
+    key, client = (account["username"] if account else identifier), _client_address(request)
+    try:
+        check_sign_in_allowed(key, client)
+    except HTTPException:
+        record_sign_in(key, client, "paused")
+        raise
+    if not verify_password(payload.password, account):
+        record_sign_in(key, client, "wrong_password")
         raise HTTPException(401, "Email or password is incorrect.")
+    if payload.portal and payload.portal != account["role"]:
+        record_sign_in(key, client, "wrong_portal")
+        raise HTTPException(403, "This account is not an authority account." if payload.portal == "authority"
+                            else "This is an authority account. Use the authority sign-in.")
+    record_sign_in(key, client, "signed_in")
     return _signed_in(account)
+
+
+@app.post("/api/auth/password")
+def change_password(payload: PasswordChange, request: Request, authorization: str | None = Header(default=None)):
+    """Change the signed-in account's password. Its other sessions are signed out; this one gets a new token."""
+    claims = _decode_bearer(authorization)
+    account = store.one("SELECT username,email,password_hash,role FROM user_accounts WHERE username=?", (claims["sub"],))
+    client = _client_address(request)
+    check_sign_in_allowed(account["username"], client)
+    if not verify_password(payload.current_password, account):
+        record_sign_in(account["username"], client, "wrong_password")
+        raise HTTPException(403, "The current password is incorrect.")
+    if account["role"] == "authority" and len(payload.new_password) < AUTHORITY_PASSWORD_MIN:
+        raise HTTPException(422, f"Authority passwords need at least {AUTHORITY_PASSWORD_MIN} characters.")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(422, "Choose a new password that is different from the current one.")
+    with store.connect() as db:
+        db.execute("""UPDATE user_accounts SET password_hash=?,password_changed_at=?,token_version=COALESCE(token_version,0)+1
+          WHERE username=?""", (PASSWORDS.hash(payload.new_password), iso_now(), account["username"]))
+        db.execute("INSERT INTO audit_log(action,entity_type,entity_id,actor,occurred_at,details_json) VALUES(?,?,?,?,?,?)",
+                   ("password_changed", "user_account", account["username"], account["username"], iso_now(), "{}"))
+    return _signed_in(store.one("SELECT username,email,role,token_version FROM user_accounts WHERE username=?", (account["username"],)))
+
+
+@app.get("/api/auth/sign-ins")
+def authority_sign_ins(limit: int = Query(default=50, ge=1, le=200), actor: str = Depends(authority_token)):
+    """Recent sign-in attempts on authority accounts, and the limits that pause sign-in."""
+    failures, window = sign_in_limits()
+    rows = store.rows("""SELECT a.account_key AS username,a.client,a.outcome,a.attempted_at FROM login_attempts a
+      JOIN user_accounts u ON u.username=a.account_key WHERE u.role='authority' ORDER BY a.attempted_at DESC LIMIT ?""", (limit,))
+    return {"sign_ins": rows, "max_failures": failures, "pause_minutes": int(window.total_seconds() // 60)}
 
 
 @app.get("/api/auth/me")
 def current_account(authorization: str | None = Header(default=None)):
     claims = _decode_bearer(authorization)
-    account = store.one("SELECT email FROM user_accounts WHERE username=?", (claims["sub"],))
-    return {"username": claims["sub"], "email": account["email"] if account else None, "role": claims["role"]}
+    account = store.one("SELECT email,password_changed_at FROM user_accounts WHERE username=?", (claims["sub"],))
+    return {"username": claims["sub"], "email": account["email"], "role": claims["role"],
+            "password_changed_at": account["password_changed_at"]}
 
 
 # ---------- maps ----------
 
 @app.get("/api/map/config")
 def map_config():
-    return {"center": [12.9716, 77.5946], "zoom": 11, "map_provider": "Google Maps",
-            "google_routing_configured": core.google_configured()}
+    return {"center": [12.9716, 77.5946], "zoom": 11, "google_routing_configured": core.google_configured(),
+            "google_maps_browser_key": core.google_browser_key(), "place_search": places.provider_setting()}
 
 
 @app.get("/api/geocode")
 def geocode(q: str = Query(min_length=3, max_length=120), actor: str = Depends(signed_in_user)):
-    if not core.google_configured():
-        raise HTTPException(503, "Google Maps services are not configured. Add GOOGLE_MAPS_API_KEY to the project .env file.")
-    results = [{
-        "display_name": item.get("formatted_address"),
-        "latitude": float(item["geometry"]["location"]["lat"]),
-        "longitude": float(item["geometry"]["location"]["lng"]),
-        "place_type": (item.get("types") or [None])[0],
-        "source_type": "google_geocoding",
-    } for item in core.google_geocode(q + ", Bengaluru, India")[:5]]
-    return {"query": q, "results": results, "source_type": "google_geocoding"}
+    """Places in Bengaluru matching a typed name or address (searched only when submitted)."""
+    return places.search(q)
 
 
 # ---------- status and data summaries ----------

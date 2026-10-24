@@ -46,6 +46,8 @@ def collect_weather() -> dict:
 JOBS = {
     "collect_weather": {"every": 3600, "run": collect_weather, "description": "Weather observations and forecasts per zone"},
     "reassess_trips": {"every": 900, "run": notifications.reassess_due_trips, "description": "Re-check trips departing soon"},
+    "trip_reminders": {"every": 300, "run": notifications.send_departure_reminders,
+                       "description": "Advance notice of traffic, delays and better routes before each trip"},
     "expire_stale_reports": {"every": 900, "run": lambda: {"expired": incidents.expire_stale_reports()},
                              "description": "Expire unreviewed citizen reports"},
     "camera_collection": {"every": 60, "run": cameras.collect_due, "description": "Sample approved camera streams that are due"},

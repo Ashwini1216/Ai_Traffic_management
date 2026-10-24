@@ -1,8 +1,10 @@
-"""Offline stand-ins for Google Maps Platform and Open-Meteo, so tests never use a real key.
+"""Offline stand-ins for Google Maps Platform, OpenStreetMap search and Open-Meteo, so tests
+never use a real key or a public service.
 
-install(core) replaces the two functions every module calls for external data. Routes are
-built from the requested points (a direct route and a curved alternative); geocoding answers
-from a small table; weather is a fixed 48-hour forecast with rain two to four hours ahead.
+install(core) replaces the two functions every module calls for external data. Routes are built
+from the requested points (a direct route and a curved alternative), with the traffic delay set
+in TRAFFIC; place searches answer from a small table; weather is a fixed 48-hour forecast with
+rain two to four hours ahead.
 """
 from __future__ import annotations
 
@@ -10,10 +12,20 @@ import math
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
 
+from fastapi import HTTPException
+
 CALLS: list[tuple[str, dict]] = []
-# The address carries markup so the browser tests can check popups show it as plain text.
-INDIRANAGAR = {"formatted_address": "<img src=x onerror=\"window.__xss=1\">Indiranagar, Bengaluru",
-               "geometry": {"location": {"lat": 12.9719, "lng": 77.6412}}, "types": ["sublocality"]}
+# Travel time with traffic divided by the time without traffic, for each fake route.
+TRAFFIC = {"direct": 1.15, "alternative": 1.05}
+DEFAULT_TRAFFIC = dict(TRAFFIC)
+# The name carries markup so the browser tests can check popups show it as plain text.
+INDIRANAGAR = {"displayName": {"text": "<img src=x onerror=\"window.__xss=1\">Indiranagar"},
+               "formattedAddress": "<img src=x onerror=\"window.__xss=1\">Indiranagar, Bengaluru",
+               "location": {"latitude": 12.9719, "longitude": 77.6412}, "types": ["sublocality"]}
+AVALAHALLI = {"displayName": {"text": "Avalahalli"}, "formattedAddress": "Avalahalli, Banashankari, Bengaluru, Karnataka",
+              "location": {"latitude": 12.9457, "longitude": 77.5440}, "types": ["sublocality"]}
+DELHI = {"displayName": {"text": "Connaught Place"}, "formattedAddress": "Connaught Place, New Delhi",
+         "location": {"latitude": 28.6315, "longitude": 77.2167}, "types": ["sublocality"]}
 
 
 def encode_polyline(points: list[tuple[float, float]]) -> str:
@@ -37,26 +49,47 @@ def _distance_m(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 2 * 6371000 * math.asin(math.sqrt(h))
 
 
-def routes(url: str, payload: dict) -> dict:
+def routes(payload: dict) -> dict:
     CALLS.append(("routes", payload))
     o, d = payload["origin"]["location"]["latLng"], payload["destination"]["location"]["latLng"]
     start, end = (o["latitude"], o["longitude"]), (d["latitude"], d["longitude"])
     found = []
-    for bend, seconds in ((0.0, 900), (0.012, 1140)):
+    for name, bend, free_flow_s in (("direct", 0.0, 780), ("alternative", 0.012, 1080)):
         points = [(start[0] + (end[0] - start[0]) * t + bend * math.sin(math.pi * t), start[1] + (end[1] - start[1]) * t)
                   for t in (i / 20 for i in range(21))]
         length = sum(_distance_m(a, b) for a, b in zip(points, points[1:]))
-        found.append({"duration": f"{seconds}s", "distanceMeters": round(length), "polyline": {"encodedPolyline": encode_polyline(points)}})
+        found.append({"duration": f"{round(free_flow_s * TRAFFIC[name])}s", "staticDuration": f"{free_flow_s}s",
+                      "distanceMeters": round(length), "polyline": {"encodedPolyline": encode_polyline(points)}})
     return {"routes": found if payload.get("computeAlternativeRoutes") else found[:1]}
 
 
-def _geocode(address: str) -> dict:
-    text = address.lower()
-    if "nowhere" in text:
-        return {"status": "ZERO_RESULTS", "results": []}
+def places(payload: dict) -> dict:
+    text = payload["textQuery"].lower()
+    CALLS.append(("places", {"query": payload["textQuery"]}))
     if "denied" in text:
-        return {"status": "REQUEST_DENIED", "error_message": "You must enable Billing on the Google Cloud Project."}
-    return {"status": "OK", "results": [INDIRANAGAR]}
+        raise HTTPException(502, "Google place search refused the request: Places API (New) has not been used in this project.")
+    if "nowhere" in text:
+        return {}
+    if "delhi" in text:
+        return {"places": [DELHI]}
+    return {"places": [AVALAHALLI if "avalahalli" in text else INDIRANAGAR]}
+
+
+def post_json(url: str, payload: dict, field_mask: str | None = None, service: str = "Google Routes") -> dict:
+    if "places.googleapis.com" in url:
+        return places(payload)
+    return routes(payload)
+
+
+def _openstreetmap(query: dict) -> list:
+    text = query.get("q", [""])[0].lower()
+    CALLS.append(("openstreetmap", {"query": text}))
+    if "nowhere" in text:
+        return []
+    if "delhi" in text:
+        return [{"name": "Connaught Place", "display_name": "Connaught Place, New Delhi, India", "lat": "28.6315", "lon": "77.2167"}]
+    return [{"name": "Avalahalli", "display_name": "Avalahalli, Bengaluru South, Karnataka, India", "lat": "12.9460",
+             "lon": "77.5450", "type": "suburb"}]
 
 
 def _weather(query: dict) -> dict:
@@ -73,12 +106,12 @@ def _weather(query: dict) -> dict:
     }
 
 
-def external_json(url: str, user_agent: str | None = None) -> dict:
+def external_json(url: str, user_agent: str | None = None):
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
-    if parsed.netloc == "maps.googleapis.com" and parsed.path.endswith("/geocode/json"):
-        CALLS.append(("geocode", {"address": query.get("address", [""])[0]}))
-        return _geocode(query.get("address", [""])[0])
+    if "nominatim" in parsed.netloc:
+        assert user_agent and "FlowState" in user_agent, "OpenStreetMap requests must identify the app"
+        return _openstreetmap(query)
     if parsed.netloc == "api.open-meteo.com":
         CALLS.append(("weather", {"latitude": query["latitude"][0], "longitude": query["longitude"][0]}))
         return _weather(query)
@@ -92,5 +125,5 @@ def install(core) -> None:
     """Swap in the fakes; the real functions stay available in ORIGINALS for error-handling tests."""
     ORIGINALS.setdefault("google_post_json", core.google_post_json)
     ORIGINALS.setdefault("external_json", core.external_json)
-    core.google_post_json = routes
+    core.google_post_json = post_json
     core.external_json = external_json

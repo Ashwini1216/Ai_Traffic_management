@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hmac
+import math
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -10,17 +11,69 @@ from fastapi import Header, HTTPException
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-import core  # noqa: F401  (loads .env before the settings below are read)
+import core  # also loads .env before the settings below are read
 
 JWT_ALGORITHM = "HS256"
 _configured_jwt_secret = os.getenv("JWT_SECRET_KEY", "")
 JWT_SECRET = _configured_jwt_secret if _configured_jwt_secret and not _configured_jwt_secret.startswith("REPLACE_") else secrets.token_urlsafe(48)
 PASSWORDS = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+AUTHORITY_PASSWORD_MIN = 12
+# Checked when no account matches, so a sign-in takes as long whether or not the account exists.
+_NO_ACCOUNT_HASH = PASSWORDS.hash(secrets.token_urlsafe(16))
 
 
-def create_access_token(username: str, role: str) -> str:
-    expires = datetime.now(timezone.utc) + timedelta(hours=12)
-    return jwt.encode({"sub": username, "role": role, "exp": expires}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+def create_access_token(username: str, role: str, version: int = 0) -> str:
+    """A 12-hour token; `version` is the account's token_version, so a password change ends older sessions."""
+    now = datetime.now(timezone.utc)
+    return jwt.encode({"sub": username, "role": role, "ver": version, "iat": now, "exp": now + timedelta(hours=12)},
+                      JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_password(password: str, account: dict | None) -> bool:
+    if account is None:
+        PASSWORDS.verify(password, _NO_ACCOUNT_HASH)
+        return False
+    return PASSWORDS.verify(password, account["password_hash"])
+
+
+# ---------- sign-in protection ----------
+
+def sign_in_limits() -> tuple[int, timedelta]:
+    """LOGIN_MAX_FAILURES wrong passwords for one account within LOGIN_LOCKOUT_MINUTES pause its sign-in."""
+    failures = max(1, int(os.getenv("LOGIN_MAX_FAILURES") or 5))
+    return failures, timedelta(minutes=max(1, int(os.getenv("LOGIN_LOCKOUT_MINUTES") or 15)))
+
+
+def check_sign_in_allowed(account_key: str, client: str) -> None:
+    """Refuse to check a password after too many wrong ones: the limit for one account (a correct
+    sign-in resets it), or four times the limit from one network address across all accounts.
+    A paused account stays paused even for the right password until the window has passed."""
+    import store
+
+    limit, window = sign_in_limits()
+    now = datetime.now(timezone.utc)
+    since = (now - window).isoformat()
+    last_success = store.one("SELECT MAX(attempted_at) AS latest FROM login_attempts WHERE account_key=? AND outcome='signed_in'",
+                             (account_key,))["latest"]
+    for column, value, start, allowed, whom in (("account_key", account_key, max(since, last_success or since), limit, "this account"),
+                                                ("client", client, since, limit * 4, "this network address")):
+        failures = store.rows(f"""SELECT attempted_at FROM login_attempts WHERE {column}=? AND outcome='wrong_password'
+          AND attempted_at>? ORDER BY attempted_at DESC LIMIT ?""", (value, start, allowed))
+        if len(failures) >= allowed:
+            wait_s = max(1, math.ceil((core.parse_utc(failures[-1]["attempted_at"]) + window - now).total_seconds()))
+            minutes = math.ceil(wait_s / 60)
+            raise HTTPException(429, f"Too many wrong passwords for {whom}. Sign-in is paused; try again in "
+                                     f"{minutes} minute{'' if minutes == 1 else 's'}.", headers={"Retry-After": str(wait_s)})
+
+
+def record_sign_in(account_key: str, client: str, outcome: str) -> None:
+    import store
+
+    now = datetime.now(timezone.utc)
+    with store.connect() as db:
+        db.execute("INSERT INTO login_attempts(account_key,client,outcome,attempted_at) VALUES(?,?,?,?)",
+                   (account_key, client, outcome, now.isoformat()))
+        db.execute("DELETE FROM login_attempts WHERE attempted_at<?", ((now - timedelta(days=90)).isoformat(),))
 
 
 def _decode_bearer(authorization: str | None) -> dict:
@@ -29,11 +82,18 @@ def _decode_bearer(authorization: str | None) -> dict:
         raise HTTPException(401, "Sign in is required.")
     try:
         claims = jwt.decode(provided, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        if not claims.get("sub") or not claims.get("role"):
-            raise HTTPException(401, "Invalid account token.")
-        return claims
     except JWTError as exc:
-        raise HTTPException(401, "Invalid or expired account token.") from exc
+        raise HTTPException(401, "Invalid or expired account token. Sign in again.") from exc
+    if not claims.get("sub") or not claims.get("role"):
+        raise HTTPException(401, "Invalid account token.")
+    import store
+
+    account = store.one("SELECT token_version FROM user_accounts WHERE username=?", (str(claims["sub"]),))
+    if account is None:
+        raise HTTPException(401, "This account no longer exists.")
+    if int(claims.get("ver") or 0) != (account["token_version"] or 0):
+        raise HTTPException(401, "This session ended because the account's password was changed. Sign in again.")
+    return claims
 
 
 def _legacy_token(authorization: str | None) -> bool:

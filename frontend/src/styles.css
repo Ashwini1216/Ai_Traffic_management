@@ -218,6 +218,7 @@ textarea { resize: vertical; line-height: 1.5; }
 .location-capture { justify-self: start; }
 .coordinate-note { font-size: var(--text-sm); color: var(--brand-ink); }
 .inline-error { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--red-line); border-radius: 10px; background: var(--red-soft); color: var(--red-ink); font-size: var(--text-base); line-height: 1.45; }
+.form-notice { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--amber-line); border-radius: 10px; background: var(--amber-soft); color: var(--amber-ink); font-size: var(--text-base); line-height: 1.45; }
 .alert-banner, .model-warning {
   display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; padding: 14px 16px;
   border: 1px solid var(--amber-line); border-radius: var(--radius); background: var(--amber-soft); color: var(--amber-ink);
@@ -389,6 +390,29 @@ tbody tr.row-highlight:hover td { background: var(--brand-soft); }
 .selected-place small { font-size: var(--text-sm); color: var(--text-2); }
 .pick-map { position: relative; height: 260px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); }
 .pick-map .route-map { height: 260px; }
+.map-toolbar { align-items: flex-start; }
+
+/* Place search: every match is listed so the person picks the right one (there are several Avalahallis). */
+.place-search { display: grid; flex: 1; gap: 8px; min-width: 0; }
+.place-results { display: grid; gap: 2px; max-height: 300px; margin: 0; padding: 6px; overflow-y: auto; list-style: none; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow-lg); }
+.place-results button { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 10px; border: 0; border-radius: var(--radius-sm); background: none; text-align: left; color: var(--ink); }
+.place-results button:hover, .place-results button:focus-visible { background: var(--brand-soft); }
+.place-results svg { flex: none; margin-top: 3px; color: var(--brand); }
+.place-results span { display: grid; gap: 2px; min-width: 0; }
+.place-results b { font-size: var(--text-md); }
+.place-results small { font-size: var(--text-sm); line-height: 1.45; color: var(--text-2); }
+.place-attribution { font-size: var(--text-xs); color: var(--text-3); }
+.place-picker { display: grid; gap: 8px; min-width: 0; }
+.place-picker .search-box { height: 44px; }
+.found-place { display: grid; gap: 8px; margin-top: 10px; padding: 12px; border: 1px solid var(--brand-line); border-radius: var(--radius); background: var(--brand-soft); }
+.found-place b { display: flex; align-items: flex-start; gap: 6px; font-size: var(--text-base); line-height: 1.45; color: var(--ink); }
+.found-place b svg { flex: none; margin-top: 2px; color: var(--brand-ink); }
+.found-place small { font-size: var(--text-xs); color: var(--text-2); }
+.found-place-actions { display: grid; gap: 8px; }
+
+/* OpenStreetMap maps (Leaflet). Its stylesheet loads later, hence the extra :root specificity. */
+:root .leaflet-container { isolation: isolate; font: inherit; background: #e6ebef; }
+:root .leaflet-popup-content { font-size: var(--text-base); line-height: 1.5; }
 
 /* ---------- Landing ---------- */
 .portal-landing { min-height: 100vh; overflow: hidden; padding: 0 max(5vw, 20px); background: radial-gradient(ellipse at 78% 30%, #e3f2ef 0, #f3f8f6 34%, #fbfbf9 72%); color: var(--text); }
@@ -449,7 +473,9 @@ tbody tr.row-highlight:hover td { background: var(--brand-soft); }
 .login-watermark { margin-top: 22px; font-size: var(--text-xs); font-weight: 600; letter-spacing: 1px; color: var(--text-3); }
 
 /* ---------- Commuter home ---------- */
-.commuter-map-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; min-height: max(560px, calc(100vh - 232px)); }
+.commuter-map-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; gap: 16px; }
+/* The map keeps a screen-sized height and stays in view while a long panel beside it scrolls. */
+.commuter-map-layout > .commuter-map-card { position: sticky; top: 80px; height: max(560px, calc(100vh - 232px)); }
 .commuter-map-card { position: relative; min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: #e6ece9; box-shadow: var(--shadow); }
 .commuter-map { width: 100%; height: 100%; min-height: 560px; }
 .commuter-map-layout .commuter-map { position: absolute; inset: 0; height: auto; min-height: 0; }
@@ -610,6 +636,40 @@ tbody tr.row-highlight:hover td { background: var(--brand-soft); }
 /* ---------- Authority: cameras ---------- */
 .camera-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin: 0 0 16px; }
 .camera-table { margin-top: 0; }
+/* People and vehicle counts for an uploaded video. */
+.video-check { margin-bottom: 18px; }
+.video-check-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-top: 20px; }
+.video-check-form label { flex: 1 1 280px; }
+.video-progress { display: grid; gap: 8px; margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); }
+.video-progress b { font-size: var(--text-base); color: var(--ink); }
+.video-progress small { font-size: var(--text-sm); color: var(--text-2); }
+.progress-track { height: 10px; overflow: hidden; border-radius: 999px; background: var(--line); }
+.progress-track i { display: block; height: 100%; border-radius: 999px; background: var(--brand); transition: width .4s ease; }
+.video-counts { margin-top: 18px; }
+.video-preview { margin: 0 0 12px; }
+.video-preview img { display: block; width: 100%; max-width: 760px; height: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.video-preview figcaption { margin-top: 8px; font-size: var(--text-sm); color: var(--text-2); }
+/* Travel risk: notes above the routes and the reasons behind each score. */
+.travel-notes { display: grid; gap: 10px; margin-bottom: 16px; }
+.travel-note { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--brand-line); border-radius: var(--radius); background: var(--brand-soft); color: var(--ink); font-size: var(--text-md); line-height: 1.5; }
+.travel-note svg { flex: none; margin-top: 2px; color: var(--brand-ink); }
+.travel-note-high_risk { border-color: var(--red-line); background: var(--red-soft); }
+.travel-note-high_risk svg { color: var(--red-ink); }
+.travel-note-leave_early { border-color: var(--amber-line); background: var(--amber-soft); }
+.travel-note-leave_early svg { color: var(--amber-ink); }
+.risk-reasons { margin: 4px 0 14px; }
+.risk-reasons b { font-size: var(--text-base); color: var(--ink); }
+.risk-reasons ul { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 20px; font-size: var(--text-base); line-height: 1.5; color: var(--text); }
+/* Journey monitoring: a better route offered on the way. */
+.route-offer { display: grid; gap: 10px; margin: 12px 0; padding: 14px 16px; border: 1px solid var(--brand-line); border-radius: var(--radius); background: var(--brand-soft); }
+.route-offer b { font-size: var(--text-md); line-height: 1.5; color: var(--ink); }
+.route-offer-actions, .monitor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.journey-monitor .checkbox { margin: 12px 0; }
+.same-destination { display: flex; align-items: flex-start; gap: 6px; font-size: var(--text-sm); line-height: 1.45; color: var(--violet); font-weight: 600; }
+.same-destination svg { flex: none; margin-top: 1px; }
+.desktop-alerts { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 18px; padding: 16px 20px; }
+.desktop-alerts > svg { flex: none; color: var(--brand-ink); }
+.desktop-alerts p { flex: 1 1 260px; font-size: var(--text-md); line-height: 1.5; color: var(--text); }
 .result-card { display: flex; align-items: flex-start; gap: 12px; margin-top: 16px; padding: 14px; border: 1px solid var(--brand-line); border-radius: var(--radius); background: var(--brand-soft); }
 .result-icon { width: 36px; height: 36px; flex: none; border-radius: 10px; display: grid; place-items: center; background: #fff; color: var(--brand-ink); }
 .result-main { display: grid; flex: 1; gap: 4px; }
@@ -651,7 +711,7 @@ tbody tr.row-highlight:hover td { background: var(--brand-soft); }
 }
 @media (max-width: 960px) {
   .commuter-map-layout { grid-template-columns: minmax(0, 1fr); height: auto; max-height: none; }
-  .commuter-map-card { height: 56vh; min-height: 420px; }
+  .commuter-map-card, .commuter-map-layout > .commuter-map-card { position: relative; top: auto; height: 56vh; min-height: 420px; }
   .commuter-map { min-height: 420px; }
   .commuter-tools-panel { overflow: visible; }
   .commuter-tool-list { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

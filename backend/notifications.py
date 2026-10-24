@@ -1,4 +1,8 @@
-"""Trip reassessment, notifications, and active-journey monitoring.
+"""Trip reassessment, departure reminders, notifications, and active-journey monitoring.
+
+Each scheduled trip gets one advance notice about TRIP_REMINDER_MINUTES before departure:
+expected traffic and its reasons, the delay traffic adds, and a better route or departure
+time when there is one. Editing the departure time brings a new notice.
 
 Scheduled trips are reassessed as departure approaches (and whenever the scheduler runs).
 A notification is sent only for a material change: risk up by at least MATERIAL_INCREASE
@@ -7,7 +11,10 @@ names the affected roads and incidents, how fresh the data is, and a suggestion.
 situation is never notified twice (a fingerprint of band, closures, and incidents).
 
 During a journey the app may send the device position (with the user's permission).
-Disruptions ahead on the route are reported once each; inaccurate positions are ignored.
+Disruptions ahead on the route are reported once each; inaccurate positions are ignored. A
+closure or a serious hazard ahead (an accident, blockage, waterlogging or VIP movement), or
+leaving the route, prompts a check for a better route from the current position; the journey
+can then switch to the new route.
 """
 from __future__ import annotations
 
@@ -21,6 +28,7 @@ from pydantic import BaseModel, Field
 
 import core
 import demand
+import forecasting
 import routing
 import store
 from core import iso_now
@@ -29,11 +37,20 @@ from security import citizen_token, signed_in_user
 router = APIRouter()
 
 REASSESS_HOURS = float(os.getenv("TRIP_REASSESS_HOURS", "12"))
+REMINDER_MINUTES = float(os.getenv("TRIP_REMINDER_MINUTES", "60"))
 MATERIAL_INCREASE = 15.0
 GPS_MAX_ACCURACY_M = 150
 OFF_ROUTE_M = 500
 ARRIVED_M = 150
 AHEAD_MARGIN_M = 50
+# Incidents at least this serious (see forecasting.INCIDENT_WEIGHTS) ahead on the route prompt a route check.
+HAZARD_REROUTE_WEIGHT = 0.5
+# Route checks call the paid routing service, so each journey may check at most every two minutes.
+ROUTE_CHECK_MIN_INTERVAL_S = 120
+BETTER_ROUTE_MIN_RISK = 10.0
+BETTER_ROUTE_MIN_SAVING_S = 300
+SAME_ROUTE_M = 120
+_route_checks: dict[str, datetime] = {}
 
 
 def band(risk: float) -> str:
@@ -129,6 +146,52 @@ def reassess_due_trips(now: datetime | None = None) -> dict:
         except HTTPException:
             continue
     return {"trips_checked": len(trips), "notifications_sent": sent}
+
+
+def remind_trip(trip: dict, now: datetime | None = None) -> str | None:
+    """The advance notice for one trip. It asks the routing service once, for the trip's own departure time."""
+    now = now or datetime.now(timezone.utc)
+    departure = max(core.parse_utc(trip["departure_at"]), now)
+    origin, destination = (trip["origin_lat"], trip["origin_lon"]), (trip["destination_lat"], trip["destination_lon"])
+    result = routing.recommend(origin, destination, departure, advice=True)
+    best = result["routes"][0]
+    planned = _trip_route(trip)["coordinates"]
+    same_route = len(planned) <= 2 or _follows(best["geometry"]["coordinates"], planned) >= 0.8
+    parts = [f"Expected traffic: {best['risk_level']} risk ({best['risk_score']:.0f}/100)"
+             + (f": {'; '.join(best['reasons'][:3])}." if best["reasons"] else ".")]
+    parts += [note["message"] for note in result["travel_notes"] if note["kind"] in ("leave_early", "safer_route")]
+    if not same_route and not any(note["kind"] == "safer_route" for note in result["travel_notes"]):
+        parts.append("A different route from the one you planned is recommended now; open Start a journey to compare routes.")
+    advice = best.get("departure_advice") or {}
+    if advice.get("recommendation") == "shift" and best["risk_level"] != "low":  # not worth moving a low-risk trip
+        parts.append(advice["message"])
+    message = f"Your trip from {trip['origin']} to {trip['destination']} leaves at {routing._clock(departure)}. " + " ".join(parts)
+    evidence = {"risk_score": best["risk_score"], "risk_level": best["risk_level"], "reasons": best["reasons"],
+                "traffic_delay_s": best.get("traffic_delay_s"), "travel_notes": result["travel_notes"],
+                "recommended_route_differs": not same_route, "departure_advice": advice, "route_id": result["route_id"]}
+    return notify(trip["username"], "departure_reminder", "Before you leave: traffic on your trip", message, evidence,
+                  _reminder_fingerprint(trip), trip["trip_id"])
+
+
+def _reminder_fingerprint(trip: dict) -> str:
+    return f"trip:{trip['trip_id']}|reminder|{trip['departure_at']}"
+
+
+def send_departure_reminders(now: datetime | None = None) -> dict:
+    """Send the advance notice for every scheduled trip that leaves within REMINDER_MINUTES and has none yet."""
+    now = now or datetime.now(timezone.utc)
+    trips = store.rows("""SELECT * FROM planned_trips WHERE state='scheduled' AND username IS NOT NULL AND origin_lat IS NOT NULL
+      AND departure_at>? AND departure_at<=?""", (now.isoformat(), (now + timedelta(minutes=REMINDER_MINUTES)).isoformat()))
+    sent = 0
+    for trip in trips:
+        # Checked before routing, because each notice asks the (paid) routing service once.
+        if store.one("SELECT 1 AS sent FROM notifications WHERE username=? AND fingerprint=?", (trip["username"], _reminder_fingerprint(trip))):
+            continue
+        try:
+            sent += remind_trip(trip, now) is not None
+        except HTTPException:
+            continue
+    return {"trips_due": len(trips), "reminders_sent": sent}
 
 
 # ---------- API: trips and notifications ----------
@@ -236,11 +299,15 @@ def journey_position(journey_id: str, payload: PositionInput, actor: str = Depen
         alerts.append({**incident, "distance_ahead_m": round(incident_along - along)})
     status = "off_route" if off_route > OFF_ROUTE_M else "on_route"
     suggestion = None
-    if any(a["closure"] for a in alerts) or status == "off_route":
+    serious = [a for a in alerts if a["closure"] or forecasting.INCIDENT_WEIGHTS.get(a["category"], 0.25) >= HAZARD_REROUTE_WEIGHT]
+    if serious or status == "off_route":
+        first = min(serious, key=lambda a: a["distance_ahead_m"]) if serious else None
+        what = None if first is None else "A road closure" if first["closure"] else routing._category_name(first["category"])
         suggestion = {"action": "reroute", "from": {"latitude": payload.latitude, "longitude": payload.longitude},
                       "to": {"latitude": journey["destination_lat"], "longitude": journey["destination_lon"]},
-                      "message": "A closure is ahead on your route; compare routes from where you are." if alerts else
-                                 "You seem to have left the planned route; compare routes from where you are."}
+                      "message": f"{what} is about {first['distance_ahead_m']} m ahead on your route; check for a better route "
+                                 "from where you are." if first else
+                                 "You seem to have left the planned route; check for a better route from where you are."}
     for alert in alerts:
         notify(actor, "disruption_ahead", "Disruption ahead on your journey",
                f"{alert['category'].replace('_', ' ').capitalize()} about {alert['distance_ahead_m']} m ahead"
@@ -251,6 +318,71 @@ def journey_position(journey_id: str, payload: PositionInput, actor: str = Depen
     return {"status": status, "progress_pct": round(100 * min(1.0, along / length), 1), "distance_from_route_m": round(off_route),
             "distance_remaining_m": round(max(0.0, length - along)), "alerts": alerts, "suggestion": suggestion,
             "resumed_after_gap": resumed}
+
+
+def _follows(candidate: list[list[float]], route: list[list[float]]) -> float:
+    """The share of a candidate route's points that lie on another route ([lon, lat] points)."""
+    points = candidate[:: max(1, len(candidate) // 40)]
+    return sum(core.locate_on_polyline(lat, lon, route)[0] <= SAME_ROUTE_M for lon, lat in points) / len(points) if points else 0.0
+
+
+@router.post("/api/journeys/{journey_id}/better-route")
+def better_route(journey_id: str, payload: PositionInput, actor: str = Depends(citizen_token)):
+    """From where the traveller is now: is a route clearly better than the one being followed (faster by
+    five minutes, lower risk by ten points, or avoiding a closure)?"""
+    journey = _journey(journey_id, actor)
+    if journey["status"] != "active":
+        raise HTTPException(409, "This journey has ended.")
+    if not core.in_bengaluru(payload.latitude, payload.longitude):
+        raise HTTPException(422, "The position is outside the Bengaluru area.")
+    now = datetime.now(timezone.utc)
+    last = _route_checks.get(journey_id)
+    if last and (now - last).total_seconds() < ROUTE_CHECK_MIN_INTERVAL_S:
+        raise HTTPException(429, "Routes were checked moments ago. The next check is possible in two minutes.")
+    _route_checks[journey_id] = now
+    current = json.loads(journey["route_json"])
+    routes = routing.recommend((payload.latitude, payload.longitude), (journey["destination_lat"], journey["destination_lon"]),
+                               None, advice=False)["routes"]
+    best = routes[0]
+    yours = max(routes, key=lambda r: _follows(r["geometry"]["coordinates"], current))
+    if _follows(yours["geometry"]["coordinates"], current) < 0.8:
+        yours = None  # no candidate follows the planned route (for example, after leaving it)
+    checked = {"checked_at": now.isoformat(), "route": best}
+    if yours is best:
+        return {**checked, "better": False, "message": "Your route is still the best one from here."}
+    if yours is None:
+        return {**checked, "better": True, "message": "Your planned route no longer fits where you are. This is the best route from here."}
+    saving = yours["baseline_duration_s"] - best["baseline_duration_s"]
+    risk_drop = yours["risk_score"] - best["risk_score"]
+    avoids_closure = yours["restricted"] and not best["restricted"]
+    if not avoids_closure and risk_drop < BETTER_ROUTE_MIN_RISK and saving < BETTER_ROUTE_MIN_SAVING_S:
+        return {**checked, "better": False, "message": "Your route is still about as good as the alternatives."}
+    gains = ["avoids the road closure on your route"] if avoids_closure else []
+    if saving >= 60:
+        gains.append(f"saves about {round(saving / 60)} minutes")
+    if risk_drop >= 1:
+        gains.append(f"lowers the route risk from {yours['risk_score']:.0f} to {best['risk_score']:.0f}")
+    elif risk_drop <= -1:
+        gains.append(f"has a slightly higher risk ({best['risk_score']:.0f} instead of {yours['risk_score']:.0f})")
+    return {**checked, "better": True, "message": "A better route is available: it " + ", ".join(gains) + ".",
+            "current": {"risk_score": yours["risk_score"], "duration_s": yours["baseline_duration_s"]}}
+
+
+class JourneyRouteInput(BaseModel):
+    coordinates: list[list[float]] = Field(min_length=2, max_length=20000)  # [lon, lat] route points
+
+
+@router.post("/api/journeys/{journey_id}/route")
+def change_journey_route(journey_id: str, payload: JourneyRouteInput, actor: str = Depends(citizen_token)):
+    """Follow a new route from here on; disruptions already reported are not reported again."""
+    journey = _journey(journey_id, actor)
+    if journey["status"] != "active":
+        raise HTTPException(409, "This journey has ended.")
+    if any(len(point) != 2 for point in payload.coordinates):
+        raise HTTPException(422, "Route points must be [longitude, latitude] pairs.")
+    with store.connect() as db:
+        db.execute("UPDATE active_journeys SET route_json=? WHERE journey_id=?", (json.dumps(payload.coordinates), journey_id))
+    return {"journey_id": journey_id, "status": "active", "route_points": len(payload.coordinates)}
 
 
 @router.post("/api/journeys/{journey_id}/end")

@@ -22,8 +22,11 @@ test.beforeAll(async ({ browser }) => {
   const segments = (await api('GET', '/api/segments', null, officer)).body.segments;
   const at = road => segments.find(s => s.road === road);
   const [a, b] = [at('Hebbal Flyover'), at('Ballari Road')];
-  await api('POST', '/api/trips', { origin: 'Hebbal Flyover', destination: 'Ballari Road', origin_lat: a.latitude, origin_lon: a.longitude,
-    destination_lat: b.latitude, destination_lon: b.longitude, departure_at: new Date(Date.now() + 2 * 3_600_000).toISOString() }, reporter.token);
+  // Three people heading to Ballari Road at the same time: enough to be shown as a popular destination.
+  for (const traveller of [reporter, await newCitizen(), await newCitizen()]) {
+    await api('POST', '/api/trips', { origin: 'Hebbal Flyover', destination: 'Ballari Road', origin_lat: a.latitude, origin_lon: a.longitude,
+      destination_lat: b.latitude, destination_lon: b.longitude, departure_at: new Date(Date.now() + 2 * 3_600_000).toISOString() }, traveller.token);
+  }
   await api('POST', '/api/access-requests', { full_name: 'Ravi Kumar', organization: 'Bengaluru Traffic Police', designation: 'Inspector',
     official_email: 'ravi.kumar@example.gov.in', reason: 'I manage signal operations for the east division.' }, applicant.token);
   await api('POST', '/api/cameras', { camera_id: 'cam-geo-01', display_name: 'Geo camera', area: 'Indiranagar', road: '100 Feet Road',
@@ -76,6 +79,22 @@ test('an official notice is published from a known road, then ended', async () =
   await expect(toastText(page)).toHaveText(/Notice ended/);
 });
 
+test('a notice can be placed by searching a place name', async () => {
+  await field(page, 'Description').locator('textarea').fill('Metro work near the lake, one lane open');
+  const search = page.getByPlaceholder('Search any place in Bengaluru for the notice');
+  await search.fill('Avalahalli');
+  await search.press('Enter');
+  await page.locator('.place-results button').first().click();
+  await expect(page.locator('.coordinate-note')).toContainText('Avalahalli');
+  const request = page.waitForRequest(r => r.url().endsWith('/api/incidents/official') && r.method() === 'POST');
+  await page.getByRole('button', { name: /Publish notice/ }).click();
+  const body = JSON.parse((await request).postData());
+  expect(body.latitude).toBeCloseTo(12.9457, 4);
+  expect(body.road).toBeNull();
+  await page.locator('.report-item', { hasText: 'Metro work near the lake' }).getByRole('button', { name: /End notice/ }).click();
+  await expect(toastText(page)).toHaveText(/Notice ended/);
+});
+
 test('checking zones raises a closure alert with a recommendation', async () => {
   const notice = await api('POST', '/api/incidents/official', { category: 'road_closure', description: 'Trinity Circle closed',
     area: 'M.G. Road', road: 'Trinity Circle', latitude: 12.9727, longitude: 77.6196, closure: true }, officer);
@@ -97,6 +116,12 @@ test('planned demand is shown without naming anyone', async () => {
   await expect(page.locator('.page-wrap')).not.toContainText(reporter.name);
 });
 
+test('popular destinations show how many people are heading to the same place', async () => {
+  const row = page.locator('.card', { hasText: 'Popular destinations' }).locator('tbody tr').first();
+  await expect(row).toContainText('Ballari Road');
+  await expect(row.locator('td').last()).toHaveText('3');
+});
+
 test('the coverage registry lists every road and saves an edit', async () => {
   await go(page, 'Data coverage');
   await expect(page.locator('.segment-card tbody tr')).toHaveCount(16);
@@ -116,7 +141,7 @@ test('observations are stored and verified, and jobs and quarantine are shown', 
   await expect(toastText(page)).toHaveText(/stored as unverified/);
   await page.locator('tr', { hasText: '2026-10-01 Morning' }).getByRole('button', { name: 'Verify' }).click();
   await expect(toastText(page)).toHaveText(/Observation verified/);
-  await expect(page.locator('.report-list-card', { hasText: 'Background jobs' }).locator('tbody tr')).toHaveCount(8);
+  await expect(page.locator('.report-list-card', { hasText: 'Background jobs' }).locator('tbody tr')).toHaveCount(9);
   await page.locator('tr', { hasText: 'Zone alerts' }).getByRole('button', { name: /Run now/ }).click();
   await expect(toastText(page)).toHaveText(/Zone alerts: ok/);
   expect(await page.locator('.report-list-card', { hasText: 'Quarantine' }).locator('tbody tr').count()).toBeGreaterThanOrEqual(1);
@@ -155,6 +180,29 @@ test('an access request is approved, then the new authority is revoked', async (
   await expect(account).toHaveCount(0);
 });
 
+test('the access page shows recent authority sign-ins and a 12-character password rule', async () => {
+  await go(page, 'Access requests');
+  const history = page.locator('.card', { hasText: 'Recent authority sign-ins' });
+  await expect(history).toContainText('After 5 wrong passwords');
+  await expect(history.locator('tbody tr').first()).toContainText('Signed in');
+  await expect(history.locator('tbody tr').first()).toContainText('officer');
+  await expect(page.locator('.form-card', { hasText: 'Change password' })).toContainText('At least 12 characters');
+});
+
+test('a commuter account is refused at the authority sign-in', async ({ browser }) => {
+  const other = await stubbedPage(browser, {}, errors);
+  await other.goto('/', { waitUntil: 'domcontentloaded' });
+  await other.getByRole('button', { name: /Authority sign in/ }).click();
+  await other.getByPlaceholder('Authority email or username').fill(reporter.email);
+  await other.getByPlaceholder('Your password').fill('citizen-password-1');
+  const response = other.waitForResponse(r => r.url().endsWith('/api/auth/login'));
+  await other.getByRole('button', { name: /Sign in securely/ }).click();
+  expect((await response).status()).toBe(403);
+  await expect(other.locator('.inline-error')).toHaveText('This account is not an authority account.');
+  expect(await other.evaluate(() => sessionStorage.getItem('flowstateToken'))).toBeNull();
+  await other.context().close();
+});
+
 test('camera settings are saved, and editing keeps coordinates and the stream', async () => {
   await go(page, 'CCTV review');
   await field(page, 'Camera ID').locator('input').fill('cam-ui-01');
@@ -181,6 +229,20 @@ test('camera settings are saved, and editing keeps coordinates and the stream', 
   expect(cameras.find(c => c.camera_id === 'cam-ui-01').has_stream).toBe(true);
 });
 
+test('a video is counted for people and vehicles without registering a camera', async () => {
+  await go(page, 'CCTV review');
+  const card = page.locator('.video-check');
+  await card.locator('input[type=file]').setInputFiles({ name: 'junction.mp4', mimeType: 'video/mp4', buffer: Buffer.from('sample video') });
+  await card.getByRole('button', { name: /Count people and vehicles/ }).click();
+  await expect(card.locator('.video-progress')).toContainText('Counting people and vehicles');
+  await expect(card.getByRole('progressbar', { name: 'Analysis progress' })).toBeVisible();
+  await expect(card.locator('.stat-tile', { hasText: 'Most people at once' })).toContainText('4', { timeout: 20_000 });
+  await expect(card.locator('.stat-tile', { hasText: 'Different people seen' })).toContainText('6');
+  await expect(card.locator('.stat-tile', { hasText: 'Vehicles seen' })).toContainText('2 cars · 1 bus');
+  await expect(card.locator('.video-preview img')).toBeVisible();
+  await expect(card).toContainText('people hide behind each other');
+});
+
 test('the clip date defaults to the Bengaluru date', async () => {
   await expect(page.locator('.form-card', { hasText: 'Review a video clip' }).locator('input[type="date"]')).toHaveValue(istTomorrow);
 });
@@ -194,11 +256,13 @@ test('the traffic data overview matches the API', async () => {
   await expect(page.locator('.model-card')).toContainText('acceptance checks');
 });
 
-test('place search shows the address as text, never as HTML', async () => {
+test('place search lists the matches and shows addresses as text, never as HTML', async () => {
   await go(page, 'Place search');
   await page.getByPlaceholder(/Search an address or landmark/).fill('Indiranagar');
   await page.getByRole('button', { name: /^Search$/ }).click();
-  await expect(page.locator('.selected-place')).toBeVisible();
+  await page.locator('.place-results button').first().click();
+  await expect(page.locator('.selected-place')).toContainText('<img src=x');
+  await expect(page.locator('.map-attribution')).toContainText('Search results from Google');
   const state = await page.evaluate(() => ({ injected: window.__xss === 1, kinds: window.__info }));
   expect(state.injected).toBe(false);
   expect(state.kinds).not.toContain('html-string');

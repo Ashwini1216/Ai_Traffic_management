@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Check, Cpu, Database, Layers, MapPin, Play, Plus, RefreshCw, ShieldCheck, TrendingUp, UserCheck, X } from 'lucide-react';
 import { BLOCKS, CATEGORY_LABELS, METHOD_LABELS, OFFICIAL_CATEGORIES, api, dateTime, label, localISODate, longDate, patch, post, shortDate, targetOptions } from './lib.js';
-import { MapSetupNotice, infoContent, useGoogleMap } from './maps.jsx';
+import { MapSetupNotice, infoContent, useMap } from './maps.jsx';
+import { ChangePassword, PlaceSearch } from './commuter.jsx';
 import { ComparisonBars, LevelBadge, StatTile, level } from './viz.jsx';
 
 function Heading({ eyebrow, title, subtitle, action }) {
@@ -9,27 +10,28 @@ function Heading({ eyebrow, title, subtitle, action }) {
 }
 const Empty = ({ title, sub }) => <div className="empty-state"><b>{title}</b>{sub && <small>{sub}</small>}</div>;
 const f3 = v => (v == null ? '—' : Number(v).toFixed(3));
+const timeOnly = value => new Date(value).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
 // ---------- zone monitor ----------
 
 function ZoneMap({ zones }) {
   const ref = useRef(null);
   const items = useRef([]);
-  const { map, mapError } = useGoogleMap(ref, 11);
+  const { map, api: maps, mapError } = useMap(ref, 11);
   useEffect(() => {
     if (!map) return;
     items.current.forEach(item => item.setMap(null));
     items.current = [];
     for (const zone of zones.filter(z => z.latitude != null)) {
       const meta = level(zone.level);
-      const circle = new window.google.maps.Circle({ map, center: { lat: zone.latitude, lng: zone.longitude }, radius: zone.radius_m || 2000,
+      const circle = new maps.Circle({ map, center: { lat: zone.latitude, lng: zone.longitude }, radius: zone.radius_m || 2000,
         strokeColor: meta.color, strokeOpacity: 0.9, strokeWeight: 2, fillColor: meta.color, fillOpacity: 0.12 });
-      const info = new window.google.maps.InfoWindow({ content: infoContent(zone.name, [meta.text, `Average expected load ${zone.expected_load}`]) });
+      const info = new maps.InfoWindow({ content: infoContent(zone.name, [meta.text, `Average expected load ${zone.expected_load}`]) });
       circle.addListener('click', () => info.open({ map, position: { lat: zone.latitude, lng: zone.longitude } }));
       items.current.push(circle);
     }
     return () => items.current.forEach(item => item.setMap(null));
-  }, [map, zones]);
+  }, [map, maps, zones]);
   return <><div className="zone-map" ref={ref} /><MapSetupNotice message={mapError} /></>;
 }
 
@@ -107,7 +109,7 @@ export function AlertsDesk({ setToast }) {
 function PickPointMap({ point, onPick }) {
   const ref = useRef(null);
   const marker = useRef(null);
-  const { map, mapError } = useGoogleMap(ref, 12);
+  const { map, api: maps, mapError } = useMap(ref, 12);
   useEffect(() => {
     if (!map) return;
     const listener = map.addListener('click', event => event.latLng && onPick({ latitude: event.latLng.lat(), longitude: event.latLng.lng() }));
@@ -117,8 +119,12 @@ function PickPointMap({ point, onPick }) {
   useEffect(() => {
     if (!map) return;
     marker.current?.setMap(null);
-    if (point) marker.current = new window.google.maps.Marker({ map, position: { lat: point.latitude, lng: point.longitude }, title: 'Notice location' });
-  }, [map, point]);
+    if (!point) return;
+    const position = { lat: point.latitude, lng: point.longitude };
+    marker.current = new maps.Marker({ map, position, title: 'Notice location' });
+    // A place chosen from the list or by search is brought into view; a map click already is.
+    if (point.focus) { map.setCenter(position); map.setZoom(15); }
+  }, [map, maps, point]);
   return <div className="pick-map"><div className="route-map" ref={ref} /><MapSetupNotice message={mapError} /></div>;
 }
 
@@ -161,10 +167,11 @@ export function NoticeDesk({ setToast, places, refresh }) {
                 <option value="">Default for this type</option><option value="info">Information</option><option value="warning">Warning</option><option value="critical">Critical</option></select></label>
             </div>
             <label>Description<textarea required minLength="5" rows="3" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What is happening and what drivers should do" /></label>
-            <label>Location from a known road<select value="" onChange={e => { const p = places.find(x => x.id === e.target.value); if (p) { setPoint(p); setForm({ ...form, area: p.area, road: p.road }); } }}>
-              <option value="">Or click the map below</option>{places.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
+            <label>Location from a known road<select value="" onChange={e => { const p = places.find(x => x.id === e.target.value); if (p) { setPoint({ ...p, focus: true }); setForm({ ...form, area: p.area, road: p.road }); } }}>
+              <option value="">Or search a place, or click the map below</option>{places.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
+            <PlaceSearch placeholder="Search any place in Bengaluru for the notice" onSelect={p => { setPoint({ ...p, focus: true }); setForm({ ...form, area: '', road: '' }); }} />
             <PickPointMap point={point} onPick={p => setPoint(p)} />
-            {point && <small className="coordinate-note">{point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</small>}
+            {point && <small className="coordinate-note">{point.label ? `${point.label} · ` : ''}{point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}</small>}
             <div className="form-pair">
               <label>Starts <small>empty = now</small><input type="datetime-local" value={form.starts_at} onChange={e => setForm({ ...form, starts_at: e.target.value })} /></label>
               <label>Ends <small>empty = default validity</small><input type="datetime-local" value={form.expires_at} onChange={e => setForm({ ...form, expires_at: e.target.value })} /></label>
@@ -212,6 +219,11 @@ export function DemandDesk() {
         <section className="card report-list-card"><div className="card-heading"><div><h2>Hotspots</h2><p>Score = 0.6 × forecast load + 0.4 × planned PCU share</p></div></div>
           {data.hotspots.length === 0 ? <Empty title="No planned demand in this window" /> : <div className="table-wrap"><table><thead><tr><th>Road</th><th>When</th><th>Trips</th><th>PCU</th><th>Forecast</th><th>Score</th></tr></thead><tbody>
             {data.hotspots.map(h => <tr key={`${h.segment_id}-${h.date}-${h.time_block}`}><td className="road-name">{h.road}<small className="table-sub">{h.area}</small></td><td>{shortDate(h.date)} {h.time_block}</td><td>{h.planned_trips}</td><td>{h.pcu}</td><td><LevelBadge value={h.predicted_class} compact /></td><td><LevelBadge value={h.level} compact /> {h.score}</td></tr>)}
+          </tbody></table></div>}
+        </section>
+        <section className="card report-list-card"><div className="card-heading"><div><h2>Popular destinations</h2><p>Places at least {data.minimum_group_size} people plan to reach within the same hour, named after the nearest known road. Smaller groups are hidden ({data.suppressed_destination_travellers} travellers).</p></div></div>
+          {data.destinations.length === 0 ? <Empty title="No destination with enough planned arrivals" /> : <div className="table-wrap"><table><thead><tr><th>Near</th><th>Arriving (IST)</th><th>Travellers</th></tr></thead><tbody>
+            {data.destinations.map(d => <tr key={`${d.latitude},${d.longitude},${d.arrivals_from}`}><td className="road-name">{d.near}<small className="table-sub">{d.latitude.toFixed(3)}, {d.longitude.toFixed(3)}</small></td><td>{dateTime(d.arrivals_from)} – {timeOnly(d.arrivals_until)}</td><td>{d.travellers}</td></tr>)}
           </tbody></table></div>}
         </section>
         <section className="card report-list-card"><div className="card-heading"><div><h2>Corridors</h2><p>Zone to zone by departure hour. Groups under {data.minimum_group_size} trips are hidden ({data.suppressed_trips} trips).</p></div></div>
@@ -429,10 +441,14 @@ export function ModelsDesk({ setToast, segments }) {
 
 // ---------- access requests ----------
 
+const SIGN_IN_OUTCOMES = { signed_in: 'Signed in', wrong_password: 'Wrong password', paused: 'Refused: sign-in paused', wrong_portal: 'Used the commuter sign-in' };
+
 export function AccessDesk({ setToast, user }) {
   const [requests, setRequests] = useState([]);
   const [authorities, setAuthorities] = useState([]);
-  const load = () => Promise.all([api('/api/access-requests?status=pending'), api('/api/authorities')]).then(([r, a]) => { setRequests(r.requests); setAuthorities(a.authorities); });
+  const [signIns, setSignIns] = useState(null);
+  const load = () => Promise.all([api('/api/access-requests?status=pending'), api('/api/authorities'), api('/api/auth/sign-ins?limit=20')])
+    .then(([r, a, s]) => { setRequests(r.requests); setAuthorities(a.authorities); setSignIns(s); });
   useEffect(() => { load().catch(err => setToast(err.message)); }, []);
   async function decide(request, status) {
     const note = status === 'rejected' ? (window.prompt('Reason for rejecting (shown to the applicant):') || '') : '';
@@ -457,6 +473,14 @@ export function AccessDesk({ setToast, user }) {
           {authorities.map(a => <tr key={a.username}><td>{a.username}{a.username === user?.username ? ' (you)' : ''}</td><td>{dateTime(a.created_at)}</td><td>{a.username !== user?.username && <button className="text-action" onClick={() => revoke(a.username)}>Revoke</button>}</td></tr>)}
         </tbody></table></div>
       </section>
+      <section className="card report-list-card"><div className="card-heading"><div><h2>Recent authority sign-ins</h2>
+        <p>{signIns ? `After ${signIns.max_failures} wrong passwords, an account's sign-in is paused for ${signIns.pause_minutes} minutes, even with the right password.` : 'Loading…'}</p></div><ShieldCheck className="muted-icon" /></div>
+        {signIns && (signIns.sign_ins.length === 0 ? <Empty title="No sign-ins recorded yet" /> : <div className="table-wrap"><table><thead><tr><th>Time</th><th>Account</th><th>Result</th><th>Network address</th></tr></thead><tbody>
+          {signIns.sign_ins.map((row, index) => <tr key={`${row.attempted_at}-${index}`}><td>{dateTime(row.attempted_at)}</td><td>{row.username}</td>
+            <td><span className={`status-chip ${row.outcome === 'signed_in' ? 'status-green' : 'status-orange'}`}><i />{SIGN_IN_OUTCOMES[row.outcome] || label(row.outcome)}</span></td><td>{row.client}</td></tr>)}
+        </tbody></table></div>)}
+      </section>
+      <ChangePassword setToast={setToast} minLength={12} />
     </>
   );
 }

@@ -38,6 +38,22 @@ class UserAccount(Base):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False, default="citizen")
     created_at: Mapped[str] = mapped_column(String, nullable=False)
+    password_changed_at: Mapped[str | None] = mapped_column(String)
+    # Sign-in tokens carry this number; changing the password raises it, which signs out other sessions.
+    token_version: Mapped[int | None] = mapped_column(Integer)
+
+
+class LoginAttempt(Base):
+    """Sign-in attempts, for pausing sign-in after repeated wrong passwords and for the authority's
+    sign-in history. account_key is the account's username, or the name typed if no account matches."""
+    __tablename__ = "login_attempts"
+    __table_args__ = (Index("ix_login_attempts_account", "account_key", "attempted_at"),
+                      Index("ix_login_attempts_client", "client", "attempted_at"))
+    attempt_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_key: Mapped[str] = mapped_column(String, nullable=False)
+    client: Mapped[str] = mapped_column(String, nullable=False)
+    outcome: Mapped[str] = mapped_column(String, nullable=False)  # signed_in, wrong_password, paused, wrong_portal
+    attempted_at: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class IncidentBroadcast(Base):
@@ -547,6 +563,7 @@ def initialize() -> None:
         _add_missing_columns(db, "planned_trips", TRIP_V2_COLUMNS)
         _add_missing_columns(db, "cameras", CAMERA_V2_COLUMNS)
         _add_missing_columns(db, "camera_footage", {"file_deleted_at": "TEXT"})
+        _add_missing_columns(db, "user_accounts", {"password_changed_at": "TEXT", "token_version": "INTEGER"})
         db.execute("CREATE INDEX IF NOT EXISTS ix_observations_segment_time ON traffic_observations(segment_id,observed_start)")
         _backfill_observation_keys(db)
         _normalize_expiry_timestamps(db)

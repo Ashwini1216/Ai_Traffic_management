@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import core
+import places
 import store
 from core import TIME_BLOCKS, iso_now
 from security import authority_token
@@ -355,14 +356,10 @@ def geocode_segment(segment_id: str, actor: str = Depends(authority_token)):
     segment = store.one("SELECT * FROM road_segments WHERE segment_id=?", (segment_id,))
     if not segment:
         raise HTTPException(404, "Road segment not found.")
-    if not core.google_configured():
-        raise HTTPException(503, "Google Maps services are not configured. Add GOOGLE_MAPS_API_KEY to the project .env file.")
-    found = core.google_geocode(f"{segment['road']}, {segment['area']}, Bengaluru, India")
+    found = places.first_location(f"{segment['road']}, {segment['area']}, Bengaluru")
     if not found:
-        raise HTTPException(404, "Google Maps could not locate this road. Set its location manually.")
-    location = found[0]["geometry"]["location"]
-    if not core.in_bengaluru(location["lat"], location["lng"]):
-        raise HTTPException(422, "Google Maps returned a location outside Bengaluru. Set its location manually.")
+        raise HTTPException(404, "Place search could not locate this road. Set its location manually.")
+    location = {"lat": found[0], "lng": found[1]}
     with store.connect() as db:
         db.execute("UPDATE road_segments SET latitude=?,longitude=?,location_source='geocoded',updated_at=? WHERE segment_id=?",
                    (location["lat"], location["lng"], iso_now(), segment_id))

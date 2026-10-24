@@ -24,13 +24,15 @@ os.environ.update({
     "DATABASE_URL": os.environ.get("FLOWSTATE_TEST_DATABASE_URL", ""),
     "JWT_SECRET_KEY": "test-secret-" + "x" * 40, "AUTHORITY_USERNAME": "officer",
     "AUTHORITY_PASSWORD": "officer-password-123", "AUTHORITY_EMAIL": "officer@example.gov.in", "AUTHORITY_TOKEN": "",
-    "GOOGLE_MAPS_API_KEY": "test-key-not-real",
+    "GOOGLE_MAPS_API_KEY": "test-key-not-real", "VITE_GOOGLE_MAPS_API_KEY": "", "PLACE_SEARCH": "auto", "NOMINATIM_URL": "",
     "SCHEDULER_ENABLED": "0", "ALLOW_FILE_STREAMS": "1", "TF_CPP_MIN_LOG_LEVEL": "3", "PYTHONIOENCODING": "utf-8",
     # Defaults spelled out so a developer's own .env cannot change the results.
     "TIME_BLOCK_STARTS": "", "PCU_FACTORS": "", "MODEL_ACCEPTANCE_MIN_GAIN": "0.02", "DEMAND_MIN_GROUP_TRIPS": "3",
     "DEMAND_HOTSPOT_PCU_SCALE": "50", "TRIP_REASSESS_HOURS": "12", "FOOTAGE_RETENTION_DAYS": "30",
     "DETAILED_RETENTION_DAYS": "365", "OBSERVATION_RETENTION_YEARS": "5", "VIDEO_SAMPLE_FPS": "10",
     "VIDEO_MAX_SAMPLED_FRAMES": "1500",
+    # Real detector tests use the weights in the project's models/ folder and are skipped without them.
+    "YOLO_WEIGHTS": str(ROOT / "models" / "yolov8n.pt"),
 })
 sys.path[:0] = [str(HERE), str(ROOT / "backend")]
 

@@ -17,7 +17,8 @@ def test_routes_are_scored_and_the_best_gets_departure_advice(client, citizen, s
     assert len(routes) == 2 and routes[0]["source_type"] == "google_route"
     for route in routes:
         assert 0 <= route["risk_score"] <= 100
-        assert set(route["components"]) == {"congestion", "planned_demand", "incidents", "weather"}
+        assert set(route["components"]) == {"congestion", "traffic", "traffic_delay", "planned_demand", "incidents", "weather"}
+        assert route["risk_level"] in ("low", "medium", "high") and isinstance(route["reasons"], list)
         assert route["roads"], "roads along the route are forecast"
     assert routes[0]["departure_advice"] is not None
 

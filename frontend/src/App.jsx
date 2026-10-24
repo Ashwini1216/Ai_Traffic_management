@@ -5,9 +5,10 @@ import {
   RefreshCw, Route, Search, ShieldCheck, SlidersHorizontal, TrendingUp, UserCheck, UserPlus, Users, Video, X,
 } from 'lucide-react';
 import { API, BLOCKS, CATEGORY_LABELS, CITIZEN_CATEGORIES, api, dateTime, localISODate, longDate, n, readJson, writeJson } from './lib.js';
-import { MapSetupNotice, infoContent, useGoogleMap } from './maps.jsx';
-import { LEVELS, LevelBadge, level } from './viz.jsx';
-import { AccountPage, NotificationsPage, PlanTrips, RoadForecast, StartJourney } from './commuter.jsx';
+import { MapSetupNotice, infoContent, useLivePosition, useMap } from './maps.jsx';
+import { subscribe } from './events.js';
+import { LEVELS, LevelBadge, StatTile, level } from './viz.jsx';
+import { AccountPage, NotificationsPage, PlaceSearch, PlanTrips, RoadForecast, StartJourney, desktopAlertsOn } from './commuter.jsx';
 import { AccessDesk, AlertsDesk, CoverageDesk, DataDesk, DemandDesk, ModelsDesk, NoticeDesk, ZoneMonitor } from './authority.jsx';
 
 const USER_NAV = [
@@ -59,6 +60,10 @@ function App() {
   const [mobileNav, setMobileNav] = useState(false);
   const [user, setUser] = useState(null);
   const [unread, setUnread] = useState(0);
+  // Why the last session ended (expired token, or the password was changed elsewhere), shown on the sign-in page.
+  const [sessionNotice, setSessionNotice] = useState('');
+  useEffect(() => subscribe('session-ended', message => { sessionStorage.removeItem('flowstateToken'); setUser(null); setSessionNotice(message); }), []);
+  const signedIn = account => { setSessionNotice(''); setUser(account); };
 
   async function refresh() {
     setBusy(true); setError('');
@@ -88,12 +93,24 @@ function App() {
     const timer = setInterval(check, 30000);
     return () => { active = false; clearInterval(timer); };
   }, []);
+  // Notifications are checked every minute and when the tab is opened again; new unread ones also
+  // pop up as desktop alerts if the commuter turned them on.
+  const seenNotices = useRef(null);
   useEffect(() => {
     if (user?.role !== 'citizen') return undefined;
-    const poll = () => api('/api/notifications').then(body => setUnread(body.unread)).catch(() => {});
+    seenNotices.current = null;
+    const poll = () => api('/api/notifications').then(body => {
+      setUnread(body.unread);
+      const fresh = body.notifications.filter(n => !n.read_at && seenNotices.current && !seenNotices.current.has(n.notification_id));
+      if (fresh.length && desktopAlertsOn() && 'Notification' in window && Notification.permission === 'granted') {
+        fresh.slice(0, 3).forEach(n => { const alert = new Notification(n.title, { body: n.message.slice(0, 220), tag: n.notification_id }); alert.onclick = () => window.focus(); });
+      }
+      seenNotices.current = new Set(body.notifications.map(n => n.notification_id));
+    }).catch(() => {});
     poll();
     const timer = setInterval(poll, 60000);
-    return () => clearInterval(timer);
+    window.addEventListener('focus', poll);
+    return () => { clearInterval(timer); window.removeEventListener('focus', poll); };
   }, [user?.role]);
   useEffect(() => { if (!toast) return; const id = setTimeout(() => setToast(''), 4200); return () => clearTimeout(id); }, [toast]);
 
@@ -101,8 +118,8 @@ function App() {
   const nav = portal === 'authority' ? AUTH_NAV : USER_NAV;
   const title = nav.flatMap(group => group.items).find(item => item.id === page)?.label || (portal === 'authority' ? 'Operations overview' : 'My commute');
   if (portal === 'landing') return <PortalLanding onChoose={mode => { history.pushState({}, '', mode === 'authority' ? '/authority' : '/user'); setPortal(mode); setPage(mode === 'authority' ? 'authority-home' : 'user-home'); }} />;
-  if (portal === 'authority' && user?.role !== 'authority') return <PortalLogin role="authority" onUser={setUser} onBack={() => { history.pushState({}, '', '/'); setPortal('landing'); }} />;
-  if (portal === 'user' && user?.role !== 'citizen') return <PortalLogin role="citizen" onUser={setUser} onBack={signOut} />;
+  if (portal === 'authority' && user?.role !== 'authority') return <PortalLogin role="authority" notice={sessionNotice} onUser={signedIn} onBack={() => { history.pushState({}, '', '/'); setPortal('landing'); }} />;
+  if (portal === 'user' && user?.role !== 'citizen') return <PortalLogin role="citizen" notice={sessionNotice} onUser={signedIn} onBack={signOut} />;
   const places = data.segments.filter(s => s.latitude != null).map(s => ({ id: s.segment_id, label: `${s.road}, ${s.area}`, latitude: s.latitude, longitude: s.longitude, area: s.area, road: s.road }));
   const pins = readJson('flowstateJourneyPoints', {});
   const googleRouting = Boolean(data.mapConfig?.google_routing_configured);
@@ -176,7 +193,7 @@ function PortalLanding({ onChoose }) {
     <footer className="landing-footer">FLOWSTATE · COLLABORATIVE TRAFFIC MONITORING <span>Research prototype · estimates are not live sensor readings</span></footer></main>;
 }
 
-function PortalLogin({ role, onUser, onBack }) {
+function PortalLogin({ role, notice, onUser, onBack }) {
   const authority = role === 'authority';
   const [mode, setMode] = useState('login'), [login, setLogin] = useState(''), [password, setPassword] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   async function submit(e) {
@@ -185,7 +202,9 @@ function PortalLogin({ role, onUser, onBack }) {
       // Everyone signs in with an email; the authority account set up in .env may use its username instead.
       const identifier = login.trim();
       const credentials = mode === 'register' || identifier.includes('@') ? { email: identifier } : { username: identifier };
-      const result = await api(mode === 'login' ? '/api/auth/login' : '/api/auth/register', { method: 'POST', body: JSON.stringify({ ...credentials, password }) });
+      // The server refuses to sign a commuter account in to the authority portal (and the reverse).
+      const body = mode === 'login' ? { ...credentials, password, portal: role } : { ...credentials, password };
+      const result = await api(mode === 'login' ? '/api/auth/login' : '/api/auth/register', { method: 'POST', body: JSON.stringify(body) });
       if (result.user?.role !== (authority ? 'authority' : 'citizen')) throw new Error(authority ? 'This account is not an authority account.' : 'Use the authority sign-in page for an authority account.');
       sessionStorage.setItem('flowstateToken', result.access_token);
       onUser(result.user);
@@ -197,7 +216,7 @@ function PortalLogin({ role, onUser, onBack }) {
   return <main className="portal-login"><button className="login-back" onClick={onBack}><ArrowRight size={15} /> Back to portal selection</button><section className="login-card"><a className="brand landing-brand" href="/"><span className="brand-mark"><Activity size={21} /></span><span>flow<span>state</span><small>TRAFFIC INTELLIGENCE</small></span></a><span className={`login-emblem ${authority ? 'authority-emblem' : ''}`}>{authority ? <ShieldCheck size={22} /> : <Navigation size={22} />}</span><div className="eyebrow">{authority ? 'RESTRICTED AUTHORITY ACCESS' : 'COMMUTER PORTAL'}</div><h1>{authority ? 'Authority sign in' : mode === 'register' ? 'Create your commuter account' : 'Welcome back'}</h1><p>{authority ? 'Sign in with an authority account. Officials can request access from a commuter account.' : 'Sign in to use trip planning and community reporting.'}</p>
     <form onSubmit={submit}>{authority
       ? <label>Email or username<input autoComplete="username" required minLength="3" value={login} onChange={e => setLogin(e.target.value)} placeholder="Authority email or username" /></label>
-      : <label>Email<input type="email" autoComplete="email" required value={login} onChange={e => setLogin(e.target.value)} placeholder="you@example.com" /></label>}<label>Password<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 10 : 1} required value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>{error && <div className="inline-error">{error}</div>}<button className="button button-primary auth-submit" disabled={busy}>{busy ? 'Checking…' : mode === 'register' ? 'Create commuter account' : 'Sign in securely'}</button></form>
+      : <label>Email<input type="email" autoComplete="email" required value={login} onChange={e => setLogin(e.target.value)} placeholder="you@example.com" /></label>}<label>Password<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 10 : 1} required value={password} onChange={e => setPassword(e.target.value)} placeholder={mode === 'register' ? 'At least 10 characters' : 'Your password'} /></label>{error ? <div className="inline-error">{error}</div> : notice && <div className="form-notice">{notice}</div>}<button className="button button-primary auth-submit" disabled={busy}>{busy ? 'Checking…' : mode === 'register' ? 'Create commuter account' : 'Sign in securely'}</button></form>
     {!authority && <button className="auth-switch" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}>{mode === 'login' ? 'New here? Create an account' : 'Already have an account? Sign in'}</button>}<div className="login-foot"><ShieldCheck size={14} />{authority ? 'Authority access is granted only after verification by an existing authority.' : 'Your personal trip details remain private.'}</div></section><span className="login-watermark">FLOWSTATE · BENGALURU</span></main>;
 }
 
@@ -214,20 +233,25 @@ function UserHome({ data, navigate }) {
     api('/api/forecast/zones').then(b => setZones(b.zones)).catch(() => setZones([]));
     api('/api/incidents/public').then(b => setNotices(b.incidents)).catch(() => setNotices([]));
   }, []);
+  const [found, setFound] = useState(null);
+  const setPoint = useCallback((key, point) => setPins(previous => {
+    const next = { ...previous, [key]: point };
+    writeJson('flowstateJourneyPoints', next);
+    return next;
+  }), []);
   const choosePoint = useCallback(point => {
-    setPins(previous => {
-      const next = { ...previous, [pickMode]: { ...point, label: `Map point (${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)})` } };
-      writeJson('flowstateJourneyPoints', next);
-      return next;
-    });
+    setPoint(pickMode, { ...point, label: `Map point (${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)})` });
     setPickMode('');
-  }, [pickMode]);
+  }, [pickMode, setPoint]);
+  const applyFound = key => { setPoint(key, { latitude: found.latitude, longitude: found.longitude, label: found.label }); setFound(null); };
   const options = [['journeys', Navigation, 'Start a journey', 'Compare routes, risk and departure time.'], ['plan', Route, 'Plan a trip', 'Save a future trip and get alerts.'], ['forecast-road', TrendingUp, 'Road forecast', 'Expected congestion for a road and time.'], ['incidents', AlertTriangle, 'Report an incident', 'Share a road issue with the authority.']];
   const busiest = [...zones].sort((a, b) => b.expected_load - a.expected_load).slice(0, 3);
   return <><PageHeading eyebrow="YOUR BENGALURU COMMUTE" title="Where are you headed?" subtitle="Zones show the current congestion outlook; pins show verified incidents and official notices." />
     <section className="commuter-map-layout"><div className="commuter-map-card"><CommuterMap pickMode={pickMode} onPick={choosePoint} pins={pins} zones={zones} notices={notices} />{pickMode && <div className="map-pick-banner">Zoom in, then tap the exact spot for your {pickMode === 'origin' ? 'starting point' : 'destination'}. <button onClick={() => setPickMode('')}>Cancel</button></div>}
       <div className="map-legend">{Object.keys(LEVELS).map(name => <LevelBadge key={name} value={name} compact />)}</div></div>
-      <aside className="commuter-tools-panel"><div className="commuter-panel-head"><span className="welcome-kicker"><Activity size={14} /> FLOWSTATE COMMUTER</span><h2>Plan around your day</h2><p>Choose exact points on the map, then start your route.</p></div>
+      <aside className="commuter-tools-panel"><div className="commuter-panel-head"><span className="welcome-kicker"><Activity size={14} /> FLOWSTATE COMMUTER</span><h2>Plan around your day</h2><p>Search a place by name or tap the map to choose your points, then start your route.</p></div>
+        <div className="home-search"><PlaceSearch onSelect={setFound} placeholder="Search a place, e.g. Avalahalli" />
+          {found && <div className="found-place"><b><MapPin size={16} /> {found.label}</b>{found.attribution && <small>{found.attribution}</small>}<div className="found-place-actions"><button className="button button-primary" onClick={() => applyFound('origin')}>Set as starting point</button><button className="button button-secondary" onClick={() => applyFound('destination')}>Set as destination</button></div></div>}</div>
         <div className="pin-pickers">{['origin', 'destination'].map(key => <button key={key} className={`pin-picker ${pickMode === key ? 'pin-picker-active' : ''}`} onClick={() => setPickMode(key)}><span className={`pin-picker-dot ${key}-dot`} /><span><small>{key === 'origin' ? 'STARTING POINT' : 'DESTINATION'}</small><b>{pins[key]?.label || 'Choose on map'}</b></span><MapPin size={16} /></button>)}</div>
         <div className="commuter-tool-list">{options.map(([id, Icon, title, desc]) => <button className="commuter-tool" key={id} onClick={() => navigate(id)}><span><Icon size={18} /></span><div><b>{title}</b><small>{desc}</small></div><ArrowRight size={16} /></button>)}</div>
         <div className="commuter-alert-mini"><div><b>Busiest zones now</b><span>{zones.length} zones</span></div>{busiest.map(z => <p key={z.zone_id}><LevelBadge value={z.level} compact /> {z.name}</p>)}{!zones.length && <small>Zone outlook is loading or unavailable.</small>}</div>
@@ -236,34 +260,48 @@ function UserHome({ data, navigate }) {
 }
 
 function CommuterMap({ pickMode, onPick, pins, zones = [], notices = [] }) {
-  const containerRef = useRef(null), itemsRef = useRef([]);
-  const { map, mapError } = useGoogleMap(containerRef, 12);
+  const containerRef = useRef(null), itemsRef = useRef([]), focusRef = useRef(null);
+  const { map, api: maps, mapError } = useMap(containerRef, 12);
+  useLivePosition(map, maps);
   useEffect(() => {
     if (!map) return;
     const listener = map.addListener('click', event => { if (pickMode && event.latLng) onPick({ latitude: event.latLng.lat(), longitude: event.latLng.lng() }); });
     map.setOptions({ draggableCursor: pickMode ? 'crosshair' : null });
     return () => listener.remove();
   }, [map, pickMode, onPick]);
+  // A place chosen or searched beside the map: zoom to it and mark it.
+  useEffect(() => {
+    if (!map) return undefined;
+    const stop = subscribe('focus-place', place => {
+      const position = { lat: Number(place.latitude), lng: Number(place.longitude) };
+      if (!Number.isFinite(position.lat) || !Number.isFinite(position.lng)) return;
+      focusRef.current?.setMap(null);
+      focusRef.current = new maps.Marker({ map, position, title: place.label, icon: { path: maps.SymbolPath.CIRCLE, scale: 9, fillColor: '#5b47a8', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 } });
+      map.setCenter(position);
+      map.setZoom(15);
+    });
+    return () => { stop(); focusRef.current?.setMap(null); focusRef.current = null; };
+  }, [map, maps]);
   useEffect(() => {
     if (!map) return;
     itemsRef.current.forEach(item => item.setMap(null));
     itemsRef.current = [];
     for (const zone of zones.filter(z => z.latitude != null)) {
       const meta = level(zone.level);
-      itemsRef.current.push(new window.google.maps.Circle({ map, center: { lat: zone.latitude, lng: zone.longitude }, radius: zone.radius_m || 2000, strokeColor: meta.color, strokeOpacity: 0.8, strokeWeight: 2, fillColor: meta.color, fillOpacity: 0.1, clickable: false }));
+      itemsRef.current.push(new maps.Circle({ map, center: { lat: zone.latitude, lng: zone.longitude }, radius: zone.radius_m || 2000, strokeColor: meta.color, strokeOpacity: 0.8, strokeWeight: 2, fillColor: meta.color, fillOpacity: 0.1, clickable: false }));
     }
     for (const notice of notices) {
-      const marker = new window.google.maps.Marker({ map, position: { lat: notice.latitude, lng: notice.longitude }, title: CATEGORY_LABELS[notice.category] || notice.category });
-      const info = new window.google.maps.InfoWindow({ content: infoContent(CATEGORY_LABELS[notice.category] || notice.category, [notice.official ? 'Official notice' : 'Verified report', notice.closure ? 'Road closed' : null, notice.details, notice.expires_at ? `Until ${dateTime(notice.expires_at)}` : null]) });
+      const marker = new maps.Marker({ map, position: { lat: notice.latitude, lng: notice.longitude }, title: CATEGORY_LABELS[notice.category] || notice.category });
+      const info = new maps.InfoWindow({ content: infoContent(CATEGORY_LABELS[notice.category] || notice.category, [notice.official ? 'Official notice' : 'Verified report', notice.closure ? 'Road closed' : null, notice.details, notice.expires_at ? `Until ${dateTime(notice.expires_at)}` : null]) });
       marker.addListener('click', () => info.open({ map, anchor: marker }));
       itemsRef.current.push(marker);
     }
     for (const [key, color, title] of [['origin', '#087e83', 'Starting point'], ['destination', '#d47763', 'Destination']]) {
       const point = pins?.[key];
-      if (point) itemsRef.current.push(new window.google.maps.Marker({ map, position: { lat: Number(point.latitude), lng: Number(point.longitude) }, title, icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 } }));
+      if (point) itemsRef.current.push(new maps.Marker({ map, position: { lat: Number(point.latitude), lng: Number(point.longitude) }, title, icon: { path: maps.SymbolPath.CIRCLE, scale: 8, fillColor: color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3 } }));
     }
     return () => itemsRef.current.forEach(item => item.setMap(null));
-  }, [map, pins, zones, notices]);
+  }, [map, maps, pins, zones, notices]);
   return <><div className="commuter-map" id="commuter-home-map" ref={containerRef} aria-label="Interactive Bengaluru map" /><MapSetupNotice message={mapError} /></>;
 }
 
@@ -289,7 +327,7 @@ function AuthorityHome({ data, navigate }) {
 
 function AuthorityIncidentMap({ data, refresh, setToast }) {
   const containerRef = useRef(null), markersRef = useRef([]);
-  const { map, mapRef, mapError } = useGoogleMap(containerRef, 11);
+  const { map, mapRef, api: maps, mapError } = useMap(containerRef, 11);
   const [filter, setFilter] = useState('reported');
   const [busyId, setBusyId] = useState('');
   const shown = data.incidents.filter(x => filter === 'all' || x.status === filter);
@@ -299,18 +337,18 @@ function AuthorityIncidentMap({ data, refresh, setToast }) {
     markersRef.current.forEach(marker => marker.setMap(null));
     markersRef.current = [];
     located.forEach(item => {
-      const marker = new window.google.maps.Marker({ map, position: { lat: Number(item.latitude), lng: Number(item.longitude) }, title: CATEGORY_LABELS[item.category] || item.category });
-      const info = new window.google.maps.InfoWindow({ content: infoContent(CATEGORY_LABELS[item.category] || item.category, [[item.area, item.road].filter(Boolean).join(' · '), item.status, item.corroboration_count ? `${item.corroboration_count} confirmation${item.corroboration_count === 1 ? '' : 's'}` : null]) });
+      const marker = new maps.Marker({ map, position: { lat: Number(item.latitude), lng: Number(item.longitude) }, title: CATEGORY_LABELS[item.category] || item.category });
+      const info = new maps.InfoWindow({ content: infoContent(CATEGORY_LABELS[item.category] || item.category, [[item.area, item.road].filter(Boolean).join(' · '), item.status, item.corroboration_count ? `${item.corroboration_count} confirmation${item.corroboration_count === 1 ? '' : 's'}` : null]) });
       marker.addListener('click', () => info.open({ map, anchor: marker }));
       markersRef.current.push(marker);
     });
     if (located.length) {
-      const bounds = new window.google.maps.LatLngBounds();
+      const bounds = new maps.LatLngBounds();
       located.forEach(item => bounds.extend({ lat: Number(item.latitude), lng: Number(item.longitude) }));
       if (located.length === 1) { map.setCenter(bounds.getCenter()); map.setZoom(14); } else map.fitBounds(bounds, 40);
     }
     return () => markersRef.current.forEach(marker => marker.setMap(null));
-  }, [map, data.incidents, filter]);
+  }, [map, maps, data.incidents, filter]);
   async function review(item, status) {
     setBusyId(item.incident_id);
     try { await api(`/api/incidents/${item.incident_id}`, { method: 'PATCH', body: JSON.stringify({ status, official_note: '' }) }); await refresh(); setToast(`Incident marked ${status}.`); }
@@ -373,31 +411,21 @@ function Metric({ icon: Icon, label, value, sub, tone }) { return <div className
 
 function TrafficMap({ data }) {
   const containerRef = useRef(null), markerRef = useRef(null);
-  const { mapRef, mapError } = useGoogleMap(containerRef, 11);
-  const [query, setQuery] = useState(''), [searching, setSearching] = useState(false), [selection, setSelection] = useState(null), [queryError, setQueryError] = useState('');
-  async function search(e) {
-    e.preventDefault();
-    if (query.trim().length < 3) return;
-    setSearching(true); setQueryError('');
-    try {
-      const r = await api(`/api/geocode?q=${encodeURIComponent(query.trim())}`);
-      if (!r.results?.length) throw new Error('No matching place found.');
-      const place = r.results[0];
-      const lat = Number(place.latitude), lng = Number(place.longitude);
-      if (!mapRef.current) throw new Error('The Google map is still loading. Try again in a moment.');
-      mapRef.current.setCenter({ lat, lng }); mapRef.current.setZoom(16);
-      if (markerRef.current) markerRef.current.setMap(null);
-      markerRef.current = new window.google.maps.Marker({ map: mapRef.current, position: { lat, lng }, title: place.display_name });
-      const content = document.createElement('div');
-      content.textContent = place.display_name;
-      new window.google.maps.InfoWindow({ content }).open({ map: mapRef.current, anchor: markerRef.current });
-      setSelection(place);
-    } catch (err) { setQueryError(err.message); } finally { setSearching(false); }
+  const { mapRef, api: maps, mapError } = useMap(containerRef, 11);
+  const [selection, setSelection] = useState(null);
+  function show(place) {
+    setSelection(place);
+    const map = mapRef.current;
+    if (!map || !maps) return;
+    const position = { lat: Number(place.latitude), lng: Number(place.longitude) };
+    map.setCenter(position); map.setZoom(16);
+    markerRef.current?.setMap(null);
+    markerRef.current = new maps.Marker({ map, position, title: place.label });
+    new maps.InfoWindow({ content: infoContent(place.label) }).open({ map, anchor: markerRef.current });
   }
   return <><PageHeading eyebrow="CITY EXPLORER" title="Place search" subtitle="Look up places in Bengaluru. Being on the map does not imply traffic-data coverage." action={<span className="pill pill-neutral">{data.coverage.length} roads with data</span>} />
-    <div className="map-toolbar"><form className="search-box" onSubmit={search}><Search size={18} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search an address or landmark in Bengaluru" /><button disabled={searching}>{searching ? 'Searching…' : 'Search'}</button></form><button className="button button-secondary" onClick={() => { mapRef.current?.setCenter({ lat: 12.9716, lng: 77.5946 }); mapRef.current?.setZoom(11); }}><LocateFixed size={16} /> Reset city view</button></div>
-    {queryError && <div className="inline-error">{queryError}</div>}
-    <div className="map-layout"><div className="map-frame"><div id="traffic-map" ref={containerRef} /><MapSetupNotice message={mapError} /></div><aside className="card map-side"><div className="map-side-icon"><MapIcon size={20} /></div><h2>Coverage at a glance</h2><p>{data.segments.filter(s => s.has_map_location).length} roads are placed on the map; {data.coverage.length} of them have traffic records.</p>{selection && <div className="selected-place"><b>Selected location</b><span>{selection.display_name}</span><small>{Number(selection.latitude).toFixed(5)}, {Number(selection.longitude).toFixed(5)}</small></div>}<p className="map-attribution">Map display and place lookup by Google Maps Platform.</p></aside></div></>;
+    <div className="map-toolbar"><PlaceSearch onSelect={show} placeholder="Search an address or landmark in Bengaluru" /><button className="button button-secondary" onClick={() => { mapRef.current?.setCenter({ lat: 12.9716, lng: 77.5946 }); mapRef.current?.setZoom(11); }}><LocateFixed size={16} /> Reset city view</button></div>
+    <div className="map-layout"><div className="map-frame"><div id="traffic-map" ref={containerRef} /><MapSetupNotice message={mapError} /></div><aside className="card map-side"><div className="map-side-icon"><MapIcon size={20} /></div><h2>Coverage at a glance</h2><p>{data.segments.filter(s => s.has_map_location).length} roads are placed on the map; {data.coverage.length} of them have traffic records.</p>{selection && <div className="selected-place"><b>Selected location</b><span>{selection.label}</span><small>{Number(selection.latitude).toFixed(5)}, {Number(selection.longitude).toFixed(5)}</small></div>}<p className="map-attribution">{[maps?.provider === 'openstreetmap' ? 'Map © OpenStreetMap contributors.' : maps ? 'Map by Google Maps Platform.' : '', selection?.attribution].filter(Boolean).join(' ')}</p></aside></div></>;
 }
 
 // ---------- cameras ----------
@@ -430,8 +458,7 @@ function CameraScreen({ data, refresh, setToast, user }) {
       const result = await api(`/api/cameras/${encodeURIComponent(cameraId)}/analyze-video`, { method: 'POST', body });
       setAnalysis(result); await refresh(); setToast('Footage reviewed and saved for authority follow-up.');
     } catch (err) {
-      const message = err.message || '';
-      setAnalysis({ error: /401|token|sign.?in/i.test(message) ? 'Your authority sign-in may have expired. Sign in again, then retry.' : /YOLO|ultralytics|OpenCV/i.test(message) ? 'Video review is not ready on this computer. Please ask the project administrator for help.' : message });
+      setAnalysis({ error: err.message === 'Failed to fetch' ? 'Could not reach the server. Check that the project is running, then try again.' : err.message });
     } finally { setBusy(false); }
   }
   async function collect(camera) {
@@ -448,7 +475,8 @@ function CameraScreen({ data, refresh, setToast, user }) {
   };
   const set = (key, value) => setRegistry({ ...registry, [key]: value });
   return <><PageHeading eyebrow="CAMERA SOURCES" title="CCTV review and live streams" subtitle="Register authorized cameras. Review uploaded clips, or let approved streams be sampled automatically." action={<span className={`pill ${isAuthority ? 'pill-neutral' : 'pill-warn'}`}><ShieldCheck size={14} />{isAuthority ? 'AUTHORITY ACCESS' : 'AUTHORITY SIGN-IN REQUIRED'}</span>} />
-    <div className="model-warning"><AlertTriangle size={19} /><span><b>Measurements are estimates.</b> Counts come from vehicle detection and tracking; flow needs a counting line. Stream video is analysed and not stored. Use only feeds your authority is permitted to use.</span></div>
+    <div className="model-warning"><AlertTriangle size={19} /><span><b>Measurements are estimates.</b> Counts come from detecting and tracking people and vehicles; flow needs a counting line. Stream video is analysed and not stored. Use only footage your authority is permitted to use.</span></div>
+    <VideoCheck isAuthority={isAuthority} />
     <div className="camera-grid"><section className="card form-card"><div className="card-heading"><div><h2>Camera registry</h2><p>Location, approval, and optional live stream.</p></div><Camera size={19} className="muted-icon" /></div>
       <form className="incident-form" onSubmit={addCamera}>{data.cameras.length > 0 && <label>Update an existing camera<select value={editingCamera} onChange={e => edit(e.target.value)}><option value="">Add a new camera</option>{data.cameras.map(cam => <option key={cam.camera_id} value={cam.camera_id}>{cam.display_name} · {cam.road || 'road not set'}</option>)}</select></label>}
         <div className="form-pair"><label>Camera ID<input required minLength="2" maxLength="80" value={registry.camera_id} onChange={e => set('camera_id', e.target.value)} placeholder="e.g. cam-jayanagar-01" /></label><label>Display name<input required minLength="2" value={registry.display_name} onChange={e => set('display_name', e.target.value)} placeholder="Jayanagar junction" /></label></div>
@@ -464,7 +492,7 @@ function CameraScreen({ data, refresh, setToast, user }) {
         <form className="incident-form" onSubmit={analyze}><label>Approved camera source<select value={cameraId} onChange={e => setCameraId(e.target.value)}><option value="">Choose an approved camera</option>{eligible.map(x => <option value={x.camera_id} key={x.camera_id}>{x.display_name} · {x.road}</option>)}</select></label><label>Video clip<input type="file" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" onChange={e => setFile(e.target.files?.[0] || null)} /><small>MP4, AVI, MOV, or MKV. Maximum size: 100 MB.</small></label>
           <div className="form-pair"><label>Observation date<input type="date" required value={dateValue} onChange={e => setDateValue(e.target.value)} /></label><label>Time of day<select value={block} onChange={e => setBlock(e.target.value)}>{BLOCKS.map(x => <option key={x}>{x}</option>)}</select></label></div>
           <button className="button button-primary" disabled={busy || !isAuthority || !eligible.length}><Video size={15} />{busy ? 'Reviewing clip…' : 'Review and save clip'}</button></form>
-        {analysis && <div className={analysis.error ? 'inline-error' : 'result-card'}>{analysis.error || <><span className="result-icon"><Camera size={18} /></span><div className="result-main"><small>VIDEO REVIEW · ESTIMATE</small><b>{analysis.analysis.clip_vehicle_count_estimate} vehicles seen</b><p>{analysis.analysis.sampled_frames} frames reviewed{analysis.analysis.clip_fully_analyzed === false ? ` (only the first ${analysis.analysis.analyzed_seconds} s of ${analysis.analysis.clip_seconds ?? '?'} s were analysed)` : ''}. This is an unverified estimate.</p><small>Review reference #{analysis.observation_id}</small></div></>}</div>}</section></div>
+        {analysis && <div className={analysis.error ? 'inline-error' : 'result-card'}>{analysis.error || <><span className="result-icon"><Camera size={18} /></span><div className="result-main"><small>VIDEO REVIEW · ESTIMATE</small><b>{analysis.analysis.clip_vehicle_count_estimate} vehicles seen{analysis.analysis.people ? `, up to ${analysis.analysis.people.most_in_one_frame} people at once` : ''}</b><p>{analysis.analysis.sampled_frames} frames reviewed{analysis.analysis.clip_fully_analyzed === false ? ` (only the first ${analysis.analysis.analyzed_seconds} s of ${analysis.analysis.clip_seconds ?? '?'} s were analysed)` : ''}. This is an unverified estimate.</p><small>Review reference #{analysis.observation_id}</small></div></>}</div>}</section></div>
     <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Registered cameras</h2><p>Only approved, online cameras are sampled or used for review.</p></div><span className="pill pill-neutral">{data.cameras.length} ENTRIES</span></div>
       {data.cameras.length ? <div className="table-wrap"><table><thead><tr><th>Name</th><th>Area / road</th><th>Authorization</th><th>Operation</th><th>Stream</th><th>Last measurement</th><th /></tr></thead><tbody>{data.cameras.map(cam => <tr key={cam.camera_id}>
         <td className="road-name">{cam.display_name}<small className="table-sub">{cam.camera_id}</small></td><td>{[cam.area, cam.road].filter(Boolean).join(' · ') || 'Not assigned'}</td>
@@ -475,6 +503,49 @@ function CameraScreen({ data, refresh, setToast, user }) {
         : <div className="empty-state"><span><Camera size={23} /></span><b>No camera sources registered</b><small>Authority approval is required before camera data can be accepted.</small></div>}</section>
     <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Saved CCTV footage</h2><p>Uploaded clips are deleted after the retention period; their analysis is kept.</p></div><span className="pill pill-neutral">{data.footage?.length || 0} CLIPS</span></div>{data.footage?.length ? <div className="footage-grid">{data.footage.map(clip => <FootageClip key={clip.footage_id} clip={clip} />)}</div> : <div className="empty-state"><span><Video size={23} /></span><b>No footage uploaded yet</b><small>Analyze an authorized clip above to save it for review.</small></div>}</section>
   </>;
+}
+
+// Any authorised video can be checked for people and vehicles without registering a camera.
+const VIDEO_STAGES = { starting: 'Starting…', waiting: 'Waiting for another video to finish…', loading: 'Loading the detector (the first time, it downloads about 6 MB)…', analysing: 'Counting people and vehicles…' };
+const VEHICLE_WORDS = { car: ['car', 'cars'], motorcycle: ['motorcycle', 'motorcycles'], bus: ['bus', 'buses'], truck: ['truck', 'trucks'] };
+const clipTime = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+
+function VideoCheck({ isAuthority }) {
+  const [file, setFile] = useState(null), [job, setJob] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (job?.status !== 'running') return undefined;
+    const timer = setTimeout(() => api(`/api/video-samples/${job.job_id}`).then(setJob).catch(err => { setError(err.message); setJob(null); }), 1000);
+    return () => clearTimeout(timer);
+  }, [job]);
+  async function start(e) {
+    e.preventDefault(); setError(''); setJob(null);
+    if (!file) { setError('Choose a video file first.'); return; }
+    setBusy(true);
+    try { const body = new FormData(); body.append('video', file); setJob(await api('/api/video-samples', { method: 'POST', body })); }
+    catch (err) { setError(err.message === 'Failed to fetch' ? 'Could not reach the server. Check that the project is running, then try again.' : err.message); }
+    finally { setBusy(false); }
+  }
+  const running = job?.status === 'running';
+  const share = running && job.frames_total ? Math.min(100, Math.round(job.frames_done / job.frames_total * 100)) : null;
+  const result = job?.status === 'done' ? job.analysis : null;
+  return <section className="card form-card video-check"><div className="card-heading"><div><h2>Count people and vehicles in a video</h2><p>Upload any authorised clip; no camera setup is needed. The video is deleted as soon as the count is finished.</p></div><Users size={19} className="muted-icon" /></div>
+    <form className="video-check-form" onSubmit={start}><label>Video file<input type="file" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" onChange={e => setFile(e.target.files?.[0] || null)} /><small>MP4, AVI, MOV, or MKV, up to 100 MB.</small></label>
+      <button className="button button-primary" disabled={busy || running || !isAuthority}><Users size={15} />{busy ? 'Uploading…' : running ? 'Counting…' : 'Count people and vehicles'}</button></form>
+    {running && <div className="video-progress" role="status"><b>{VIDEO_STAGES[job.stage] || 'Working…'}</b>{share != null && <><div className="progress-track" role="progressbar" aria-label="Analysis progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share}><i style={{ width: `${share}%` }} /></div><small>{share}% · {n(job.frames_done)} of {n(job.frames_total)} frames</small></>}</div>}
+    {(error || job?.status === 'failed') && <div className="inline-error">{error || job.error}</div>}
+    {result && <VideoCounts result={result} />}</section>;
+}
+
+function VideoCounts({ result }) {
+  const people = result.people || {};
+  const vehicles = Object.entries(result.vehicle_counts_by_class || {}).filter(([, count]) => count > 0).map(([kind, count]) => `${count} ${(VEHICLE_WORDS[kind] || [kind, kind])[count === 1 ? 0 : 1]}`);
+  return <div className="video-counts"><div className="stat-row">
+      <StatTile label="Most people at once" value={n(people.most_in_one_frame)} sub="in a single frame" />
+      <StatTile label="Different people seen" value={people.different_people_tracked == null ? '—' : n(people.different_people_tracked)} sub="followed across the clip" />
+      <StatTile label="People in view, on average" value={people.average_in_frame ?? '—'} sub="per analysed frame" />
+      <StatTile label="Vehicles seen" value={n(result.clip_vehicle_count_estimate)} sub={vehicles.join(' · ') || 'none detected'} /></div>
+    {result.preview_image && <figure className="video-preview"><img src={result.preview_image} alt={`The video at ${clipTime(result.preview_second || 0)}, with people outlined in orange and vehicles in blue`} /><figcaption>Busiest moment, at {clipTime(result.preview_second || 0)}: people outlined in orange, vehicles in blue.</figcaption></figure>}
+    <p className="form-hint">{n(result.sampled_frames)} frames analysed{result.clip_fully_analyzed === false ? ` (only the first ${result.analyzed_seconds} s of ${result.clip_seconds ?? '?'} s)` : ''}. These are estimates from the YOLOv8n detector, not verified counts. In dense crowds people hide behind each other, so the real numbers are higher.</p></div>;
 }
 
 function FootageClip({ clip }) {
@@ -492,7 +563,7 @@ function FootageClip({ clip }) {
   }
   let analysis = {};
   try { analysis = typeof clip.analysis_json === 'string' ? JSON.parse(clip.analysis_json) : (clip.analysis_json || {}); } catch { /* keep empty */ }
-  return <article className="footage-card"><div className="footage-preview">{src ? <video controls preload="metadata" src={src} /> : <button onClick={play} disabled={loading || Boolean(clip.file_deleted_at)}><Video size={24} /><span>{clip.file_deleted_at ? 'Video deleted (retention)' : loading ? 'Loading clip…' : 'Load and play clip'}</span></button>}</div><div className="footage-details"><b>{clip.original_filename}</b><small>{clip.display_name} · {dateTime(clip.uploaded_at)}</small><span>{analysis.clip_vehicle_count_estimate ?? '—'} vehicles detected · unverified estimate</span>{error && <small className="inline-error">{error}</small>}</div></article>;
+  return <article className="footage-card"><div className="footage-preview">{src ? <video controls preload="metadata" src={src} /> : <button onClick={play} disabled={loading || Boolean(clip.file_deleted_at)}><Video size={24} /><span>{clip.file_deleted_at ? 'Video deleted (retention)' : loading ? 'Loading clip…' : 'Load and play clip'}</span></button>}</div><div className="footage-details"><b>{clip.original_filename}</b><small>{clip.display_name} · {dateTime(clip.uploaded_at)}</small><span>{analysis.clip_vehicle_count_estimate ?? '—'} vehicles detected{analysis.people ? ` · up to ${analysis.people.most_in_one_frame} people at once` : ''} · unverified estimate</span>{error && <small className="inline-error">{error}</small>}</div></article>;
 }
 
 // ---------- citizen incident report ----------

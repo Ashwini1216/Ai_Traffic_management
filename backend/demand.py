@@ -9,6 +9,7 @@ aggregate; corridor groups with too few trips are suppressed to protect privacy.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import secrets
 import uuid
@@ -20,6 +21,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import core
+import places
 import store
 from core import iso_now
 from security import _decode_bearer, authority_token, citizen_token
@@ -61,25 +63,15 @@ class TripInput(BaseModel):
     vehicle_type: Literal["two_wheeler", "car", "auto_rickshaw", "cab", "bus", "truck", "bicycle"] = "car"
 
 
-def _geocode(text: str) -> tuple[float, float] | None:
-    found = core.google_geocode(text + ", Bengaluru, India")
-    if not found:
-        return None
-    location = found[0]["geometry"]["location"]
-    return location["lat"], location["lng"]
-
-
 def _resolve_points(payload: TripInput) -> tuple[float, float, float, float]:
     points = [payload.origin_lat, payload.origin_lon, payload.destination_lat, payload.destination_lon]
     if (payload.origin_lat is None) != (payload.origin_lon is None) or (payload.destination_lat is None) != (payload.destination_lon is None):
         raise HTTPException(422, "Provide both latitude and longitude for each point, or neither.")
     if payload.origin_lat is None or payload.destination_lat is None:
-        if not core.google_configured():
-            raise HTTPException(422, "Choose the start and destination on the map or from the list of places.")
-        origin = (payload.origin_lat, payload.origin_lon) if payload.origin_lat is not None else _geocode(payload.origin)
-        destination = (payload.destination_lat, payload.destination_lon) if payload.destination_lat is not None else _geocode(payload.destination)
+        origin = (payload.origin_lat, payload.origin_lon) if payload.origin_lat is not None else places.first_location(payload.origin)
+        destination = (payload.destination_lat, payload.destination_lon) if payload.destination_lat is not None else places.first_location(payload.destination)
         if not origin or not destination:
-            raise HTTPException(422, "Google Maps could not find both places. Choose them on the map instead.")
+            raise HTTPException(422, "Place search could not find both places. Choose them on the map instead.")
         points = [origin[0], origin[1], destination[0], destination[1]]
     if not (core.in_bengaluru(points[0], points[1]) and core.in_bengaluru(points[2], points[3])):
         raise HTTPException(422, "Both places must be in the Bengaluru area.")
@@ -186,6 +178,77 @@ def _owned_trip(trip_id: str, authorization: str | None) -> dict:
     return trip
 
 
+# ---------- travellers heading to the same place ----------
+# Other people's scheduled trips that arrive within SAME_DESTINATION_M of a destination within
+# SAME_DESTINATION_WINDOW of the same time. People are counted, not trips. As with corridors, a
+# count below MIN_GROUP_TRIPS is reported only as "fewer than", so no one can learn that one
+# particular other person is heading somewhere.
+
+SAME_DESTINATION_M = 500
+SAME_DESTINATION_WINDOW = timedelta(minutes=60)
+DESTINATION_CELL_DEG = 0.0045  # about 500 m, for grouping popular destinations
+
+
+def _arrival(trip: dict) -> datetime:
+    return core.parse_utc(trip["departure_at"]) + timedelta(seconds=trip.get("route_duration_s") or 0)
+
+
+def same_destination(latitude: float, longitude: float, arrival: datetime, username: str) -> dict:
+    lat_pad = SAME_DESTINATION_M / 111_000
+    lon_pad = lat_pad / max(0.2, math.cos(math.radians(latitude)))
+    rows = store.rows("""SELECT username,departure_at,route_duration_s,destination_lat,destination_lon FROM planned_trips
+      WHERE state='scheduled' AND username IS NOT NULL AND username<>? AND destination_lat BETWEEN ? AND ?
+      AND destination_lon BETWEEN ? AND ?""", (username, latitude - lat_pad, latitude + lat_pad, longitude - lon_pad, longitude + lon_pad))
+    people = {row["username"] for row in rows
+              if core.haversine_m(latitude, longitude, row["destination_lat"], row["destination_lon"]) <= SAME_DESTINATION_M
+              and abs(_arrival(row) - arrival) <= SAME_DESTINATION_WINDOW}
+    shown = len(people) >= MIN_GROUP_TRIPS
+    return {"travellers": len(people) if shown else None, "fewer_than": None if shown else MIN_GROUP_TRIPS,
+            "radius_m": SAME_DESTINATION_M, "window_minutes": int(SAME_DESTINATION_WINDOW.total_seconds() // 60)}
+
+
+def _place_name(latitude: float, longitude: float) -> str:
+    """The nearest registered road within a kilometre, or the nearest zone (never what people typed)."""
+    roads = store.rows("SELECT road,area,latitude,longitude FROM road_segments WHERE latitude IS NOT NULL")
+    nearest = min(roads, key=lambda r: core.haversine_m(latitude, longitude, r["latitude"], r["longitude"]), default=None)
+    if nearest and core.haversine_m(latitude, longitude, nearest["latitude"], nearest["longitude"]) <= 1000:
+        return f"{nearest['road']}, {nearest['area']}"
+    zone = nearest_zone(latitude, longitude)
+    named = store.one("SELECT name FROM zones WHERE zone_id=?", (zone,)) if zone else None
+    return f"{named['name']} area" if named else f"{latitude:.3f}, {longitude:.3f}"
+
+
+def popular_destinations(hours: int = 48, limit: int = 10) -> dict:
+    """Places that at least MIN_GROUP_TRIPS people plan to reach within the same hour, busiest first.
+    Destinations are grouped into cells of about 500 m; each cell reports its busiest 60-minute window."""
+    now = datetime.now(timezone.utc)
+    rows = store.rows("""SELECT username,departure_at,route_duration_s,destination_lat,destination_lon FROM planned_trips
+      WHERE state='scheduled' AND username IS NOT NULL AND destination_lat IS NOT NULL AND departure_at>=? AND departure_at<?""",
+                      (now.isoformat(), (now + timedelta(hours=hours)).isoformat()))
+    cells: dict[tuple, list] = defaultdict(list)
+    for row in rows:
+        cell = (round(row["destination_lat"] / DESTINATION_CELL_DEG), round(row["destination_lon"] / DESTINATION_CELL_DEG))
+        cells[cell].append((_arrival(row), row["username"], row["destination_lat"], row["destination_lon"]))
+    shown, suppressed = [], 0
+    for visits in cells.values():
+        visits.sort()
+        busiest: list = []
+        for index, (first, *_) in enumerate(visits):
+            window = [visit for visit in visits[index:] if visit[0] - first <= timedelta(minutes=60)]
+            if len({v[1] for v in window}) > len({v[1] for v in busiest}):
+                busiest = window
+        people = {visit[1] for visit in busiest}
+        if len(people) < MIN_GROUP_TRIPS:
+            suppressed += len({visit[1] for visit in visits})
+            continue
+        lat = sum(v[2] for v in busiest) / len(busiest)
+        lon = sum(v[3] for v in busiest) / len(busiest)
+        shown.append({"near": _place_name(lat, lon), "latitude": round(lat, 3), "longitude": round(lon, 3),
+                      "arrivals_from": busiest[0][0].isoformat(), "arrivals_until": busiest[-1][0].isoformat(), "travellers": len(people)})
+    shown.sort(key=lambda d: (-d["travellers"], d["arrivals_from"]))
+    return {"destinations": shown[:limit], "suppressed_destination_travellers": suppressed}
+
+
 # ---------- trip API ----------
 
 @router.post("/api/trips", status_code=201)
@@ -198,8 +261,10 @@ def create_trip(payload: TripInput, actor: str = Depends(citizen_token)):
           VALUES(?,?,?,?,?,?,?,?)""", (trip_id, hashlib.sha256(token.encode()).hexdigest(), payload.origin, payload.destination,
                                        departure.isoformat(), "scheduled", iso_now(), actor))
         route = _store_route(db, trip_id, payload, points, departure)
+    arrival = departure + timedelta(seconds=route["duration_s"])
     return {"trip_id": trip_id, "owner_token": token, "departure_at": departure.isoformat(), "vehicle_type": payload.vehicle_type,
             "pcu": PCU_FACTORS[payload.vehicle_type], **route,
+            "same_destination": same_destination(points[2], points[3], arrival, actor),
             "privacy_notice": "Only you can see this trip. Authorities see planned demand as totals per road and corridor."}
 
 
@@ -214,6 +279,9 @@ def my_trips(actor: str = Depends(citizen_token)):
     for trip in trips:
         trip["state"] = _trip_state(trip, now)
         trip["last_assessment"] = json.loads(trip.pop("last_assessment_json") or "null")
+        arrival = _arrival(trip)
+        trip["same_destination"] = (same_destination(trip["destination_lat"], trip["destination_lon"], arrival, actor)
+                                    if trip["state"] == "scheduled" and trip["destination_lat"] is not None and arrival > now else None)
         trip["segments"] = store.rows("""SELECT s.segment_id,s.area,s.road,ts.offset_s FROM trip_segments ts
           JOIN road_segments s ON s.segment_id=ts.segment_id WHERE ts.trip_id=? ORDER BY ts.offset_s""", (trip["trip_id"],))
     return {"trips": trips}
@@ -225,10 +293,12 @@ def update_trip(trip_id: str, payload: TripInput, authorization: str | None = He
     if trip["state"] != "scheduled":
         raise HTTPException(404, "Scheduled trip not found for this account.")
     departure = _check_departure(payload.departure_at)
-    points = _resolve_points(payload) if (payload.origin_lat is not None or core.google_configured()) else (
-        trip["origin_lat"], trip["origin_lon"], trip["destination_lat"], trip["destination_lon"])
-    if points[0] is None:
-        raise HTTPException(422, "Choose the start and destination on the map or from the list of places.")
+    # Unchanged place names without coordinates keep the stored points; changed names are searched again.
+    unchanged = (payload.origin, payload.destination) == (trip["origin"], trip["destination"])
+    if payload.origin_lat is None and payload.destination_lat is None and unchanged and trip["origin_lat"] is not None:
+        points = (trip["origin_lat"], trip["origin_lon"], trip["destination_lat"], trip["destination_lon"])
+    else:
+        points = _resolve_points(payload)
     with store.connect() as db:
         route = _store_route(db, trip_id, payload, points, departure)
     return {"trip_id": trip_id, "state": "scheduled", "departure_at": departure.isoformat(), **route}
@@ -355,6 +425,7 @@ def hotspots(hours: int = 48, limit: int = 20) -> list[dict]:
 @router.get("/api/demand")
 def demand_overview(hours: int = Query(default=48, ge=1, le=168), actor: str = Depends(authority_token)):
     return {"pcu_factors": PCU_FACTORS, "segments": upcoming_demand(hours), **corridors(hours), "hotspots": hotspots(hours),
+            **popular_destinations(hours),
             "notice": "Planned trips are intentions, not confirmed vehicles. Individual journeys are never shown."}
 
 

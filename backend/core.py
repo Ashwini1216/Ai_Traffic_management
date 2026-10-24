@@ -6,7 +6,6 @@ import math
 import os
 import ssl
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -189,6 +188,13 @@ def google_configured() -> bool:
     return bool(key) and not key.startswith("REPLACE_")
 
 
+def google_browser_key() -> str:
+    """The website's Google Maps key. Browser keys are public by design (they are restricted
+    by website address), so the server may hand it to a website built without it."""
+    key = os.getenv("VITE_GOOGLE_MAPS_API_KEY", "").strip()
+    return "" if key.startswith("REPLACE_") else key
+
+
 def external_json(url: str, user_agent: str = "BengaluruTrafficMonitor/0.2"):
     request = urllib.request.Request(url, headers={"User-Agent": user_agent, "Accept": "application/json"})
     try:
@@ -198,13 +204,16 @@ def external_json(url: str, user_agent: str = "BengaluruTrafficMonitor/0.2"):
         raise HTTPException(502, "The configured external data provider could not be reached.") from exc
 
 
-def google_post_json(url: str, payload: dict):
+# staticDuration is the time without traffic; comparing it with duration gives the live delay.
+ROUTES_FIELD_MASK = "routes.duration,routes.staticDuration,routes.distanceMeters,routes.polyline.encodedPolyline"
+
+
+def google_post_json(url: str, payload: dict, field_mask: str = ROUTES_FIELD_MASK, service: str = "Google Routes"):
     key = google_key()
     if not key:
         raise HTTPException(503, "Google Maps services are not configured. Add GOOGLE_MAPS_API_KEY to the project .env file.")
     request = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), method="POST", headers={
-        "Content-Type": "application/json", "X-Goog-Api-Key": key,
-        "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline",
+        "Content-Type": "application/json", "X-Goog-Api-Key": key, "X-Goog-FieldMask": field_mask,
     })
     try:
         with urllib.request.urlopen(request, timeout=25, context=HTTPS_CONTEXT) as response:
@@ -215,32 +224,7 @@ def google_post_json(url: str, payload: dict):
             reason = json.loads(exc.read().decode("utf-8")).get("error", {}).get("message", "")
         except (ValueError, OSError):
             reason = ""
-        raise HTTPException(502, f"Google Routes refused the request: {reason}" if reason else
-                            "Google Routes refused the request. Check the server key, billing, and Routes API access.") from exc
+        raise HTTPException(502, f"{service} refused the request: {reason}" if reason else
+                            f"{service} refused the request. Check the server key, billing, and API access.") from exc
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise HTTPException(502, "Google Routes could not be reached. Check the internet connection and try again.") from exc
-
-
-GEOCODE_BOUNDS = "12.75,77.30|13.20,77.85"   # biases address search towards Bengaluru
-GEOCODE_ERRORS = {
-    "OVER_DAILY_LIMIT": (429, "The Google key has reached its address-search limit, or billing is not set up for it."),
-    "OVER_QUERY_LIMIT": (429, "The Google key has reached its address-search limit; try again later."),
-    "INVALID_REQUEST": (422, "Google could not read this address; try a more specific one."),
-}
-
-
-def google_geocode(address: str) -> list[dict]:
-    """Google Geocoding results for an address near Bengaluru; [] when nothing matches."""
-    params = urllib.parse.urlencode({"address": address, "region": "in", "bounds": GEOCODE_BOUNDS, "key": google_key()})
-    data = external_json("https://maps.googleapis.com/maps/api/geocode/json?" + params, "FlowStateTrafficMonitor/1.0")
-    status = data.get("status")
-    if status == "OK":
-        return data.get("results", [])
-    if status == "ZERO_RESULTS":
-        return []
-    if status == "REQUEST_DENIED":
-        # Google names the cause: billing not enabled, Geocoding API not enabled, or a key restriction.
-        raise HTTPException(502, "Google refused the address search: " + (
-            data.get("error_message") or "check that the Geocoding API is enabled for the server key and billing is set up."))
-    code, message = GEOCODE_ERRORS.get(status, (502, "Google's address search failed; try again shortly."))
-    raise HTTPException(code, message)
+        raise HTTPException(502, f"{service} could not be reached. Check the internet connection and try again.") from exc

@@ -1,4 +1,5 @@
 // Shared helpers: API access, formatting, and labels used across the app.
+import { publish } from './events.js';
 
 export const API = import.meta.env.VITE_API_BASE || '';
 export const BLOCKS = ['Midnight', 'Morning', 'Daytime', 'Noon', 'Evening', 'Night'];
@@ -15,7 +16,12 @@ export async function api(path, options = {}) {
     },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(errorMessage(body, response.status));
+  if (!response.ok) {
+    const message = errorMessage(body, response.status);
+    // A token the server no longer accepts (expired, or the password was changed) ends the session.
+    if (response.status === 401 && token && !path.startsWith('/api/auth/login')) publish('session-ended', message);
+    throw new Error(message);
+  }
   return body;
 }
 

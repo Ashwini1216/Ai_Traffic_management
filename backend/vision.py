@@ -1,20 +1,28 @@
 """Authorized video clip analysis with YOLOv8 and OpenCV.
 
-The returned counts are clip detections, not calibrated traffic volume or speed.
-This module only reads the given file; the API decides whether the clip is kept.
+The returned counts are clip detections of people and vehicles, not calibrated traffic
+volume, speed or crowd size. This module only reads the given file; the API decides whether
+the clip is kept.
 """
 from __future__ import annotations
 
+import base64
 import math
 import os
 import threading
 from pathlib import Path
+from typing import Callable
+
+import core
 
 _MODEL = None
 _MODEL_LOCK = threading.Lock()
 # The detector and its tracker keep state between frames, so clips are analysed one at a time.
 _ANALYSIS_LOCK = threading.Lock()
+PERSON_CLASS = 0
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+# Progress reports: (stage, sampled frames done, frames that will be sampled or None).
+Progress = Callable[[str, int, "int | None"], None]
 # The tracker links detections only when a vehicle moves a short distance between sampled
 # frames; at one frame per second most moving vehicles are never followed. Ten frames per
 # second keeps highway tracking close to every-frame results at a fraction of the cost.
@@ -30,9 +38,26 @@ def _model():
                 from ultralytics import YOLO
             except ImportError as exc:
                 raise RuntimeError("Install the project dependencies from the root requirements.txt to use video analysis.") from exc
-            weights = os.getenv("YOLO_WEIGHTS", "yolov8n.pt")
-            _MODEL = YOLO(weights)
+            _disable_usage_statistics()
+            # The weights file (about 6 MB) is downloaded from Ultralytics' GitHub releases on first use.
+            weights = os.getenv("YOLO_WEIGHTS") or str(core.MODELS_DIR / "yolov8n.pt")
+            try:
+                _MODEL = YOLO(weights)
+            except Exception as exc:  # download, file and format errors all mean the detector is unavailable
+                raise RuntimeError(f"The YOLOv8n detector could not be loaded from {weights}. The first video analysis "
+                                   f"downloads it from GitHub (about 6 MB), so check the internet connection. ({exc})") from exc
     return _MODEL
+
+
+def _disable_usage_statistics() -> None:
+    """Ultralytics sends anonymous usage statistics unless switched off; this app keeps video work local."""
+    import importlib
+
+    for module in ("ultralytics.utils.events", "ultralytics.hub.utils"):  # newer and older releases
+        try:
+            importlib.import_module(module).events.enabled = False
+        except (ImportError, AttributeError):
+            continue
 
 
 def _reset_trackers(detector) -> None:
@@ -145,28 +170,61 @@ def analyze_stream(source: str, seconds: float, counting_line: list | None = Non
             "occupancy": round(sum(occupancy) / len(occupancy), 3), "queue_length": queue}
 
 
-def analyze_video(path: Path, max_sampled_frames: int = MAX_SAMPLED_FRAMES) -> dict:
+def _preview_image(frame, boxes: list[tuple[list[float], int]]) -> str:
+    """The frame as a JPEG data URL, with people outlined in orange and vehicles in blue."""
+    import cv2
+
+    for (x1, y1, x2, y2), class_id in boxes:
+        colour = (0, 120, 230) if class_id == PERSON_CLASS else (200, 90, 20)  # BGR
+        cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), colour, 3)
+    height, width = frame.shape[:2]
+    if width > 960:
+        frame = cv2.resize(frame, (960, round(height * 960 / width)))
+    ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    return "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii") if ok else ""
+
+
+def analyze_video(path: Path, max_sampled_frames: int = MAX_SAMPLED_FRAMES, progress: Progress | None = None,
+                  preview: bool = False) -> dict:
+    """Count people and vehicles in a clip. With `preview`, the frame with the most people (or, with
+    no people, the most vehicles) is returned with the detections drawn on it."""
     try:
         import cv2
     except ImportError as exc:
         raise RuntimeError("OpenCV is not installed. Reinstall the project dependencies from the root requirements.txt.") from exc
 
+    # Check the file before loading the detector, so a file that is not a video fails fast.
+    probe = cv2.VideoCapture(str(path))
+    readable = probe.isOpened() and probe.read()[0]
+    probe.release()
+    if not readable:
+        raise ValueError("OpenCV could not read this video. Use a supported MP4, AVI, MOV, or MKV file.")
+    report = progress or (lambda stage, done, total: None)
+    report("loading", 0, None)
     detector = _model()
+    report("waiting", 0, None)  # until any other analysis has finished
     with _ANALYSIS_LOCK:
         capture = cv2.VideoCapture(str(path))
         if not capture.isOpened():
+            capture.release()
             raise ValueError("OpenCV could not read this video. Use a supported MP4, AVI, MOV, or MKV file.")
         fps = capture.get(cv2.CAP_PROP_FPS)
         known_fps = fps if fps and fps > 0 else None
         total_frames = capture.get(cv2.CAP_PROP_FRAME_COUNT)
         every_n = max(1, round((known_fps or 30) / SAMPLE_FPS))
+        expected = min(max_sampled_frames, math.ceil(total_frames / every_n)) if total_frames > 0 else None
         frame_number = sampled = peak = 0
         unique_tracks: set[int] = set()
         per_class_tracks: dict[str, set[int]] = {name: set() for name in VEHICLE_CLASSES.values()}
         per_class_peak = {name: 0 for name in VEHICLE_CLASSES.values()}
+        people_tracks: set[int] = set()
+        people_peak = people_total = 0
+        timeline: dict[int, dict[str, int]] = {}
+        best = (-1, -1, None, [], 0.0)  # people, vehicles, frame, boxes, second
         tracked_boxes_available = False
         reached_end = False
         _reset_trackers(detector)
+        report("analysing", 0, expected)
         try:
             while sampled < max_sampled_frames:
                 ok, frame = capture.read()
@@ -177,21 +235,32 @@ def analyze_video(path: Path, max_sampled_frames: int = MAX_SAMPLED_FRAMES) -> d
                 if (frame_number - 1) % every_n:
                     continue
                 sampled += 1
+                second = (frame_number - 1) / known_fps if known_fps else (sampled - 1) / SAMPLE_FPS
                 # persist=False on the first frame creates a new tracker for this clip.
-                result = detector.track(frame, persist=sampled > 1, classes=list(VEHICLE_CLASSES),
+                result = detector.track(frame, persist=sampled > 1, classes=[PERSON_CLASS, *VEHICLE_CLASSES],
                                         conf=0.35, verbose=False)[0]
+                if sampled % 10 == 0:
+                    report("analysing", sampled, expected)
                 boxes = result.boxes
-                if boxes is None or len(boxes) == 0:
+                classes = boxes.cls.int().tolist() if boxes is not None and len(boxes) else []
+                people = classes.count(PERSON_CLASS)
+                vehicles = len(classes) - people
+                people_total += people
+                people_peak = max(people_peak, people)
+                peak = max(peak, vehicles)
+                bucket = timeline.setdefault(int(second), {"people": 0, "vehicles": 0})
+                bucket["people"], bucket["vehicles"] = max(bucket["people"], people), max(bucket["vehicles"], vehicles)
+                if preview and (people, vehicles) > best[:2]:
+                    best = (people, vehicles, frame.copy(), list(zip(boxes.xyxy.tolist(), classes)) if classes else [], second)
+                if not classes:
                     continue
-                classes = boxes.cls.int().tolist()
-                peak = max(peak, len(classes))
                 ids = boxes.id
                 if ids is not None:
                     tracked_boxes_available = True
-                    track_ids = ids.int().tolist()
-                    for class_id, track_id in zip(classes, track_ids):
-                        label = VEHICLE_CLASSES.get(int(class_id))
-                        if label:
+                    for class_id, track_id in zip(classes, ids.int().tolist()):
+                        if class_id == PERSON_CLASS:
+                            people_tracks.add(int(track_id))
+                        elif (label := VEHICLE_CLASSES.get(int(class_id))):
                             unique_tracks.add(int(track_id))
                             per_class_tracks[label].add(int(track_id))
                 counts = {name: classes.count(class_id) for class_id, name in VEHICLE_CLASSES.items()}
@@ -203,6 +272,7 @@ def analyze_video(path: Path, max_sampled_frames: int = MAX_SAMPLED_FRAMES) -> d
             capture.release()
     if sampled == 0:
         raise ValueError("The video contains no readable frames.")
+    report("analysing", sampled, sampled)
     if not tracked_boxes_available:
         count_estimate = peak
         vehicle_counts = per_class_peak
@@ -212,10 +282,10 @@ def analyze_video(path: Path, max_sampled_frames: int = MAX_SAMPLED_FRAMES) -> d
         vehicle_counts = {name: len(ids) for name, ids in per_class_tracks.items()}
         count_method = "unique_tracker_ids_in_clip"
     quality_flags = ["clip_count_is_not_block_volume", "camera_view_requires_site_calibration",
-                     "not_an_independently_verified_traffic_measurement"]
+                     "not_an_independently_verified_traffic_measurement", "dense_crowds_are_undercounted"]
     if not reached_end:
         quality_flags.append("clip_partially_analyzed_frame_limit_reached")
-    return {
+    analysis = {
         "model": "YOLOv8n", "source_type": "authorized_camera_video_analysis",
         "sampled_frames": sampled, "sample_interval_seconds": round(every_n / known_fps, 2) if known_fps else None,
         "analyzed_seconds": round(frame_number / known_fps, 1) if known_fps else None,
@@ -223,7 +293,17 @@ def analyze_video(path: Path, max_sampled_frames: int = MAX_SAMPLED_FRAMES) -> d
         "clip_fully_analyzed": reached_end,
         "clip_vehicle_count_estimate": count_estimate, "vehicle_counts_by_class": vehicle_counts,
         "count_method": count_method,
+        # People: the most seen in one frame, the average per sampled frame, and different tracked people.
+        "people": {"most_in_one_frame": people_peak, "average_in_frame": round(people_total / sampled, 1),
+                   "different_people_tracked": len(people_tracks) if tracked_boxes_available else None},
+        # Per second of video: the most people and vehicles seen in any sampled frame of that second.
+        "timeline": [{"second": second, **counts} for second, counts in sorted(timeline.items())],
         "quality_status": "unverified",
         "quality_flags": quality_flags,
-        "notice": "Counts describe detections in this clip only. They are not calibrated traffic volume, flow rate, speed, or verified ground truth.",
+        "notice": "Counts describe detections in this clip only. They are not calibrated traffic volume, flow rate, speed, "
+                  "crowd size, or verified ground truth. In dense crowds people hide behind each other, so real numbers are higher.",
     }
+    if preview and best[2] is not None:
+        analysis["preview_image"] = _preview_image(best[2], best[3])
+        analysis["preview_second"] = round(best[4], 1)
+    return analysis

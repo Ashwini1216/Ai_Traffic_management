@@ -51,8 +51,8 @@ def test_zone_alerts_are_raised_once_and_can_be_acknowledged(client, authority):
 
 def test_every_background_job_is_listed_and_unknown_jobs_are_refused(client, authority):
     jobs = {j["job"] for j in client.get("/api/jobs", headers=authority).json()["jobs"]}
-    assert jobs == {"collect_weather", "reassess_trips", "expire_stale_reports", "camera_collection", "zone_alerts",
-                    "data_quality", "retention", "sync_segments"}
+    assert jobs == {"collect_weather", "reassess_trips", "trip_reminders", "expire_stale_reports", "camera_collection",
+                    "zone_alerts", "data_quality", "retention", "sync_segments"}
     assert client.post("/api/jobs/no_such_job/run", headers=authority).status_code == 404
 
 

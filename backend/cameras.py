@@ -1,14 +1,18 @@
-"""Camera registry, uploaded clip review, and continuous collection from approved streams.
+"""Camera registry, uploaded clip review, sample video analysis, and continuous collection
+from approved streams.
 
-Only cameras an authority marked approved and online are used. A stream is sampled for a
-few seconds at its collection interval; the derived measurements (vehicles crossing the
-counting line, flow per hour, occupancy, queue) are stored as timestamped observations. The
-video itself is not stored. A camera that keeps failing is marked offline and reported.
+Only cameras an authority marked approved and online are used for observations. A stream is
+sampled for a few seconds at its collection interval; the derived measurements (vehicles
+crossing the counting line, flow per hour, occupancy, queue) are stored as timestamped
+observations. The video itself is not stored. A camera that keeps failing is marked offline
+and reported. A sample video can also be checked for people and vehicles without a camera;
+it is deleted as soon as its analysis ends.
 """
 from __future__ import annotations
 
 import json
 import os
+import threading
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path, PureWindowsPath
@@ -32,6 +36,7 @@ FOOTAGE_DIR = DATA_DIR / "cctv_footage"
 VIDEO_MEDIA_TYPES = {".mp4": "video/mp4", ".avi": "video/x-msvideo", ".mov": "video/quicktime", ".mkv": "video/x-matroska"}
 STREAM_SCHEMES = ("rtsp://", "rtsps://", "rtmp://", "http://", "https://")
 OFFLINE_AFTER_FAILURES = 3
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
 
 class CameraInput(BaseModel):
@@ -195,6 +200,18 @@ def _parse_date(value: str) -> date:
         raise HTTPException(422, "Date must use YYYY-MM-DD format.") from None
 
 
+async def _read_upload(video: UploadFile) -> tuple[bytes, str]:
+    """The uploaded video and its vetted extension."""
+    suffix = Path(video.filename or "").suffix.lower()
+    if suffix not in VIDEO_MEDIA_TYPES:
+        raise HTTPException(415, "Upload a supported MP4, AVI, MOV, or MKV video.")
+    contents = await video.read(MAX_UPLOAD_BYTES + 1)
+    await video.close()
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "Video clips must be 100 MB or smaller.")
+    return contents, suffix
+
+
 @router.post("/api/cameras/{camera_id}/analyze-video")
 async def analyze_camera_video(camera_id: str, video: UploadFile = File(...),
                                observed_date: str = Form(...), time_block: str = Form(...),
@@ -208,13 +225,7 @@ async def analyze_camera_video(camera_id: str, video: UploadFile = File(...),
         raise HTTPException(422, "observed_date cannot be in the future.")
     if time_block not in TIME_BLOCKS:
         raise HTTPException(422, "time_block must be one of: " + ", ".join(TIME_BLOCKS))
-    suffix = Path(video.filename or "").suffix.lower()
-    if suffix not in VIDEO_MEDIA_TYPES:
-        raise HTTPException(415, "Upload a supported MP4, AVI, MOV, or MKV video.")
-    contents = await video.read(100 * 1024 * 1024 + 1)
-    await video.close()
-    if len(contents) > 100 * 1024 * 1024:
-        raise HTTPException(413, "Video clips must be 100 MB or smaller.")
+    contents, suffix = await _read_upload(video)
     footage_id = str(uuid.uuid4())
     FOOTAGE_DIR.mkdir(parents=True, exist_ok=True)
     # Stage the upload inside the footage folder rather than the system temp folder: the
@@ -254,6 +265,69 @@ async def analyze_camera_video(camera_id: str, video: UploadFile = File(...),
         raise
     return {"camera_id": camera_id, "observation_id": observation["id"], "observation_quality": observation["quality_status"],
             "footage_id": footage_id, "playback_url": f"/api/camera-footage/{footage_id}/video", "analysis": analysis, "actor": actor}
+
+
+# ---------- sample video analysis ----------
+# Results stay in memory for an hour so the page can show them; nothing is written to the database.
+
+SAMPLE_DIR = DATA_DIR / "video_samples"
+SAMPLE_RESULT_SECONDS = 3600
+_SAMPLES: dict[str, dict] = {}
+_SAMPLES_LOCK = threading.Lock()
+
+
+def _run_sample(job_id: str, path: Path) -> None:
+    from vision import analyze_video
+
+    def progress(stage: str, done: int, total: int | None) -> None:
+        with _SAMPLES_LOCK:
+            _SAMPLES[job_id].update(stage=stage, frames_done=done, frames_total=total)
+
+    try:
+        outcome = {"status": "done", "analysis": analyze_video(path, progress=progress, preview=True)}
+    except (ValueError, RuntimeError) as exc:
+        outcome = {"status": "failed", "error": str(exc)}
+    except Exception as exc:  # report it on the page rather than leave the page waiting
+        outcome = {"status": "failed", "error": f"The analysis stopped unexpectedly: {exc}"}
+    finally:
+        path.unlink(missing_ok=True)
+    with _SAMPLES_LOCK:
+        _SAMPLES[job_id].update(outcome, finished_at=iso_now())
+
+
+def _sample_view(job: dict) -> dict:
+    return {key: value for key, value in job.items() if key != "owner"}
+
+
+@router.post("/api/video-samples", status_code=202)
+async def start_sample_analysis(video: UploadFile = File(...), actor: str = Depends(authority_token)):
+    """Count people and vehicles in an authorised video without registering a camera. Poll the
+    returned job for progress; the video is deleted when the analysis ends."""
+    contents, suffix = await _read_upload(video)
+    job_id = str(uuid.uuid4())
+    SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
+    path = SAMPLE_DIR / f"{job_id}{suffix}"
+    path.write_bytes(contents)
+    now = datetime.now(timezone.utc)
+    with _SAMPLES_LOCK:
+        for old_id, old in list(_SAMPLES.items()):
+            finished = core.parse_utc(old.get("finished_at"))
+            if finished and (now - finished).total_seconds() > SAMPLE_RESULT_SECONDS:
+                del _SAMPLES[old_id]
+        _SAMPLES[job_id] = {"job_id": job_id, "status": "running", "stage": "starting", "frames_done": 0, "frames_total": None,
+                            "filename": Path(video.filename or "video").name, "started_at": now.isoformat(), "owner": actor}
+        view = _sample_view(_SAMPLES[job_id])
+    threading.Thread(target=_run_sample, args=(job_id, path), daemon=True, name=f"video-sample-{job_id[:8]}").start()
+    return view
+
+
+@router.get("/api/video-samples/{job_id}")
+def sample_analysis(job_id: str, actor: str = Depends(authority_token)):
+    with _SAMPLES_LOCK:
+        job = _SAMPLES.get(job_id)
+        if not job or job["owner"] != actor:
+            raise HTTPException(404, "This video analysis was not found. Results are kept for one hour.")
+        return _sample_view(job)
 
 
 @router.get("/api/camera-footage")

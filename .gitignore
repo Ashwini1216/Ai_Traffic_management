@@ -15,6 +15,7 @@ data/*.zip
 data/*.csv
 data/*_manifest.json
 data/cctv_footage/
+data/video_samples/
 data/logs/
 # Trained model versions (models/<version>/) and older single-file artifacts.
 models/*/

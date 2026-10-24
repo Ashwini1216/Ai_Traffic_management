@@ -8,6 +8,16 @@ const python = process.platform === 'win32'
   ? path.join(root, '.venv', 'Scripts', 'python.exe')
   : path.join(root, '.venv', 'bin', 'python');
 const PORT = 8765;
+// A second server with no Google keys, for the OpenStreetMap map (3-openstreetmap.spec.js).
+const OSM_PORT = 8766;
+const server = (port, mode) => ({
+  command: `"${python}" "${path.join(__dirname, 'server.py')}" ${port} ${mode}`,
+  url: `http://127.0.0.1:${port}/api/health`,
+  timeout: 300_000,
+  reuseExistingServer: false,
+  stdout: 'ignore',
+  stderr: 'pipe',
+});
 
 module.exports = defineConfig({
   testDir: __dirname,
@@ -16,12 +26,5 @@ module.exports = defineConfig({
   workers: 1,
   reporter: [['list']],
   use: { baseURL: `http://127.0.0.1:${PORT}`, viewport: { width: 1360, height: 900 }, trace: 'retain-on-failure' },
-  webServer: {
-    command: `"${python}" "${path.join(__dirname, 'server.py')}" ${PORT}`,
-    url: `http://127.0.0.1:${PORT}/api/health`,
-    timeout: 300_000,
-    reuseExistingServer: false,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  webServer: [server(PORT, 'google'), server(OSM_PORT, 'openstreetmap')],
 });
