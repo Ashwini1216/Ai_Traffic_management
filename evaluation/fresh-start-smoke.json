@@ -1,0 +1,25 @@
+{
+  "checked_at": "2026-11-11T09:51:15.543Z",
+  "source_commit": "6945ffd",
+  "frontend_clean_install": "passed",
+  "frontend_build": "passed",
+  "backend_python_environment": "Reused installed Python dependencies; a fresh Python dependency install and other operating systems were not tested.",
+  "home": "passed",
+  "authority_bootstrap_and_signin": "passed",
+  "historical_records": 0,
+  "models": 0,
+  "model_training_ready": false,
+  "cameras": 0,
+  "local_graph_available": false,
+  "empty_state_pages": [
+    "Models",
+    "Data coverage",
+    "CCTV review",
+    "Traffic data",
+    "Observations & jobs"
+  ],
+  "script_errors": [],
+  "api_server_errors": [],
+  "background_jobs_enabled": false,
+  "scope": "Clean source export plus new frontend dependency installation and empty-data browser/API smoke check; installed Python environment reused."
+}
