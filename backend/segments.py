@@ -200,13 +200,30 @@ def _compute_coverage() -> dict[str, dict]:
     rows = store.rows("""SELECT area,road,observed_date,time_block,traffic_volume,average_speed,travel_time_index,
       congestion_level,weather,quality_status,source_type FROM traffic_observations""")
     grouped: dict[tuple, list] = defaultdict(list)
+    daily: dict[tuple,list] = defaultdict(list)
     for row in rows:
         if row["time_block"] in TIME_BLOCKS:
             grouped[(row["area"], row["road"])].append(row)
+        elif row['time_block']=='Daily' and row['quality_status']!='rejected':
+            daily[(row['area'],row['road'])].append(row)
     result = {}
     for pair, segment in by_pair.items():
         records = grouped.get(pair, [])
-        result[segment["segment_id"]] = _segment_stats(segment, records)
+        stats = _segment_stats(segment, records)
+        values = daily.get(pair,[])
+        stats.update(block_record_count=len(records),daily_record_count=len(values),
+                     block_latest_observation=stats.get('latest_observation'))
+        if values:
+            dates = sorted({r['observed_date'] for r in values})
+            stats['record_count'] += len(values);stats['has_traffic_data'] = True
+            stats['earliest_observation'] = min(stats['earliest_observation'] or dates[0],dates[0])
+            stats['latest_observation'] = max(stats['latest_observation'] or dates[-1],dates[-1])
+            stats['sources'] = {**stats['sources'],'public_daily_dataset':len(values)}
+            if not records:
+                stats['weather_coverage_pct'] = round(100*sum(bool(r['weather']) for r in values)/len(values),1)
+            span = (date.fromisoformat(dates[-1])-date.fromisoformat(dates[0])).days+1
+            stats['daily_missing_date_pct'] = round(100*(1-len(dates)/span),1)
+        result[segment['segment_id']] = stats
     return result
 
 
@@ -273,11 +290,15 @@ def _with_eligibility(stats: dict, now: datetime) -> dict:
         data_method = "sequence_model"
     elif pattern_ready:
         data_method = "historical_pattern"
+    elif stats.get('daily_record_count',0)>=MIN_PATTERN_RECORDS:
+        data_method = 'daily_historical_pattern'
     elif stats["has_traffic_data"]:
         data_method = "limited_history"
     else:
         data_method = "no_history"
     notes = []
+    if stats.get('daily_record_count'):
+        notes.append('Public daily records are kept separate from time blocks; they cannot establish time-of-day traffic patterns.')
     if not stats["has_map_location"]:
         notes.append("Not placed on the map yet; set its location or geocode it.")
     if stats["has_traffic_data"] and not recent_sequence:

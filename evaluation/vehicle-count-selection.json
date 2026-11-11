@@ -1,0 +1,249 @@
+{
+  "selection_period": "validation only",
+  "selected": {
+    "weights": "yolov8s.pt",
+    "imgsz": 960,
+    "conf": 0.35,
+    "agnostic_nms": true
+  },
+  "criterion": "Highest class-agnostic IoU50 detection F1, then lower frame-count MAE; no test tuning.",
+  "trials": [
+    {
+      "settings": {
+        "weights": "yolov8n.pt",
+        "imgsz": 640,
+        "conf": 0.35,
+        "agnostic_nms": false
+      },
+      "aggregate": {
+        "frames": 376,
+        "reference_vehicle_instances": 1823,
+        "predicted_vehicle_instances": 1608,
+        "count_mae": 0.875,
+        "count_wape": 0.1805,
+        "precision_iou50": 0.9347,
+        "recall_iou50": 0.8245,
+        "f1_iou50": 0.8761,
+        "tp": 1503,
+        "fp": 105,
+        "fn": 320
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_41063",
+          "split": "validation",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 1164,
+          "predicted_vehicle_instances": 918,
+          "count_mae": 1.3936,
+          "count_wape": 0.2251,
+          "precision_iou50": 0.9444,
+          "recall_iou50": 0.7448,
+          "f1_iou50": 0.8329,
+          "tp": 867,
+          "fp": 51,
+          "fn": 297,
+          "processing_seconds": 4.04,
+          "counting_line": [
+            [
+              0.55,
+              0.15
+            ],
+            [
+              0.55,
+              1
+            ]
+          ],
+          "annotation_sha256": "6a4386eb661fb93a98d41d74c97529a1213ec8a577e9132e406a8cdc68f05d8f"
+        },
+        {
+          "sequence": "MVI_39761",
+          "split": "validation",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 659,
+          "predicted_vehicle_instances": 690,
+          "count_mae": 0.3564,
+          "count_wape": 0.1017,
+          "precision_iou50": 0.9217,
+          "recall_iou50": 0.9651,
+          "f1_iou50": 0.9429,
+          "tp": 636,
+          "fp": 54,
+          "fn": 23,
+          "processing_seconds": 3.42,
+          "counting_line": [
+            [
+              0.1,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "annotation_sha256": "31f9d57feef3a3e19b6e92e987878c91ac2e470d911b801247d1ce9de8f26177"
+        }
+      ]
+    },
+    {
+      "settings": {
+        "weights": "yolov8s.pt",
+        "imgsz": 960,
+        "conf": 0.25,
+        "agnostic_nms": true
+      },
+      "aggregate": {
+        "frames": 376,
+        "reference_vehicle_instances": 1823,
+        "predicted_vehicle_instances": 2068,
+        "count_mae": 1.2473,
+        "count_wape": 0.2573,
+        "precision_iou50": 0.7926,
+        "recall_iou50": 0.8991,
+        "f1_iou50": 0.8425,
+        "tp": 1639,
+        "fp": 429,
+        "fn": 184
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_41063",
+          "split": "validation",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 1164,
+          "predicted_vehicle_instances": 1078,
+          "count_mae": 0.7128,
+          "count_wape": 0.1151,
+          "precision_iou50": 0.9193,
+          "recall_iou50": 0.8514,
+          "f1_iou50": 0.884,
+          "tp": 991,
+          "fp": 87,
+          "fn": 173,
+          "processing_seconds": 11.91,
+          "counting_line": [
+            [
+              0.55,
+              0.15
+            ],
+            [
+              0.55,
+              1
+            ]
+          ],
+          "annotation_sha256": "6a4386eb661fb93a98d41d74c97529a1213ec8a577e9132e406a8cdc68f05d8f"
+        },
+        {
+          "sequence": "MVI_39761",
+          "split": "validation",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 659,
+          "predicted_vehicle_instances": 990,
+          "count_mae": 1.7819,
+          "count_wape": 0.5083,
+          "precision_iou50": 0.6545,
+          "recall_iou50": 0.9833,
+          "f1_iou50": 0.7859,
+          "tp": 648,
+          "fp": 342,
+          "fn": 11,
+          "processing_seconds": 11.93,
+          "counting_line": [
+            [
+              0.1,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "annotation_sha256": "31f9d57feef3a3e19b6e92e987878c91ac2e470d911b801247d1ce9de8f26177"
+        }
+      ]
+    },
+    {
+      "settings": {
+        "weights": "yolov8s.pt",
+        "imgsz": 960,
+        "conf": 0.35,
+        "agnostic_nms": true
+      },
+      "aggregate": {
+        "frames": 376,
+        "reference_vehicle_instances": 1823,
+        "predicted_vehicle_instances": 1833,
+        "count_mae": 0.7819,
+        "count_wape": 0.1613,
+        "precision_iou50": 0.8822,
+        "recall_iou50": 0.887,
+        "f1_iou50": 0.8846,
+        "tp": 1617,
+        "fp": 216,
+        "fn": 206
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_41063",
+          "split": "validation",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 1164,
+          "predicted_vehicle_instances": 1042,
+          "count_mae": 0.7979,
+          "count_wape": 0.1289,
+          "precision_iou50": 0.9319,
+          "recall_iou50": 0.8342,
+          "f1_iou50": 0.8803,
+          "tp": 971,
+          "fp": 71,
+          "fn": 193,
+          "processing_seconds": 11.94,
+          "counting_line": [
+            [
+              0.55,
+              0.15
+            ],
+            [
+              0.55,
+              1
+            ]
+          ],
+          "annotation_sha256": "6a4386eb661fb93a98d41d74c97529a1213ec8a577e9132e406a8cdc68f05d8f"
+        },
+        {
+          "sequence": "MVI_39761",
+          "split": "validation",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 659,
+          "predicted_vehicle_instances": 791,
+          "count_mae": 0.766,
+          "count_wape": 0.2185,
+          "precision_iou50": 0.8167,
+          "recall_iou50": 0.9803,
+          "f1_iou50": 0.891,
+          "tp": 646,
+          "fp": 145,
+          "fn": 13,
+          "processing_seconds": 11.95,
+          "counting_line": [
+            [
+              0.1,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "annotation_sha256": "31f9d57feef3a3e19b6e92e987878c91ac2e470d911b801247d1ce9de8f26177"
+        }
+      ]
+    }
+  ]
+}

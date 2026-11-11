@@ -1,0 +1,59 @@
+{
+  "checked_at": "2026-11-11T04:36:23.016379+00:00",
+  "source": "https://view.custardlev.uk/video_feed",
+  "publication": "https://diagramchasing.fun/2026/mapping-clouds/stations/bengaluru",
+  "camera_id": "public-banaswadi-webcam",
+  "available": true,
+  "observed_frame_rate": 0.91,
+  "width": 960,
+  "height": 594,
+  "changing_frames": 4,
+  "warmup_placeholders_skipped": 1,
+  "frames": [
+    {
+      "received_at": "2026-11-11T04:36:19.710213+00:00",
+      "width": 960,
+      "height": 594,
+      "sha256": "1f7a4c73de643235ab081789dc6b33c0ed8c6f81c0cba521e9ee3b9c61a5f2fa"
+    },
+    {
+      "received_at": "2026-11-11T04:36:20.732693+00:00",
+      "width": 960,
+      "height": 594,
+      "sha256": "404c2ec81dfeeab4c25b36167e49ddfbc943971ec345a861baee8a57f889a96f"
+    },
+    {
+      "received_at": "2026-11-11T04:36:21.716766+00:00",
+      "width": 960,
+      "height": 594,
+      "sha256": "2428d8e548373b9c323a4e54472c82371b076f04d850b413ce0358403fda7ebe"
+    },
+    {
+      "received_at": "2026-11-11T04:36:23.014432+00:00",
+      "width": 960,
+      "height": 594,
+      "sha256": "18ed33b38e7c38ee93f1282cfc536f0dbf2837c2df228705f8a791f5f68c1b86"
+    }
+  ],
+  "location": {
+    "latitude": 13.0145,
+    "longitude": 77.64935,
+    "confidence": "Approximate public Banaswadi junction reference, not surveyed."
+  },
+  "affiliation": "Independent public webcam; not a Bengaluru Traffic Police feed.",
+  "measurement_validated": false,
+  "notice": "Low-refresh public imagery. Visible-frame estimates require review; reliable distinct counts, flow and queues are not established.",
+  "registered": true,
+  "measurement": {
+    "observation_id": 42009,
+    "sampled_frames": 19,
+    "effective_sample_fps": 0.95,
+    "average_vehicles_in_frame": 3.05,
+    "peak_vehicles_in_frame": 5,
+    "low_refresh_rate": true,
+    "measurement_notice": "Low-refresh imagery supports visible-frame estimates; reliable distinct counts, line flow and queues need a higher frame rate.",
+    "quality_status": "unverified",
+    "vehicle_count": 5,
+    "flow_per_hour": null
+  }
+}

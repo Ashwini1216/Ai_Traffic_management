@@ -57,3 +57,24 @@ def test_no_change_is_offered_when_the_route_is_still_good(client, citizen, segm
     client.post(f"/api/journeys/{journey}/end", headers=citizen)
     assert client.post(f"/api/journeys/{journey}/better-route", json={"latitude": best[0][1], "longitude": best[0][0]},
                        headers=citizen).status_code == 409
+
+
+def test_small_detour_is_offered_after_closure_even_when_most_points_overlap(client, citizen, authority, monkeypatch):
+    import routing
+    current = [[77.62+i*.001,12.97] for i in range(21)]
+    detour = [list(p) for p in current]
+    detour[10][1] += .002
+    best = {'geometry':{'coordinates':detour},'restricted':False,'risk_score':10,'baseline_duration_s':600}
+    monkeypatch.setattr(routing,'recommend',lambda *args,**kwargs:{'routes':[best]})
+    journey = start(client,citizen,current,current[-1][1],current[-1][0])
+    here = {'latitude':current[0][1],'longitude':current[0][0],'accuracy_m':10}
+    assert not client.post(f'/api/journeys/{journey}/better-route',json=here,headers=citizen).json()['better']
+    closure = client.post('/api/incidents/official',json={'category':'road_closure','description':'A short section of this route is closed',
+        'latitude':current[10][1],'longitude':current[10][0],'closure':True},headers=authority).json()
+    try:
+        result = client.post(f'/api/journeys/{journey}/better-route',json=here,headers=citizen)
+        assert result.status_code == 200 and result.json()['better']
+        assert 'verified road closure' in result.json()['message']
+    finally:
+        client.patch('/api/incidents/'+closure['incident_id'],json={'status':'resolved'},headers=authority)
+        client.post(f'/api/journeys/{journey}/end',headers=citizen)

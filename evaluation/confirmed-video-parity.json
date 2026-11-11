@@ -1,0 +1,8 @@
+{
+  "sequence": "MVI_41063",
+  "production_tracks": 46,
+  "benchmark_tracks": 46,
+  "frames": 375,
+  "passed": true,
+  "checked_at": "2026-11-11T04:25:29.526183+00:00"
+}

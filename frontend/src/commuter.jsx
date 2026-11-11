@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Check, Clock3, KeyRound, LocateFixed, MapPin, Navigation, Radio, Route, Search, ShieldCheck, Square, TrendingUp, UserPlus, Users } from 'lucide-react';
-import { publish } from './events.js';
+import { publish, subscribe } from './events.js';
 import { CATEGORY_LABELS, METHOD_LABELS, VEHICLE_LABELS, api, dateTime, km, label, localDateTimeValue, minutes, patch, post, targetOptions } from './lib.js';
 import { MapSetupNotice, infoContent, useLivePosition, useMap } from './maps.jsx';
 import { ComponentBars, ConfidenceTag, LevelBadge, ProbabilityMeters, StatTile } from './viz.jsx';
@@ -133,9 +133,9 @@ export function ForecastCard({ forecast }) {
       </div>
       <ProbabilityMeters probabilities={forecast.probabilities} />
       <div className="forecast-method"><TrendingUp size={14} /> <b>{METHOD_LABELS[forecast.method] || forecast.method}</b><span>{forecast.method_label}</span></div>
-      {forecast.predicted_values && (
+      {forecast.predicted_values?.traffic_volume != null && (
         <div className="stat-row">
-          <StatTile label="Forecast volume" value={Math.round(forecast.predicted_values.traffic_volume).toLocaleString('en-IN')} sub="vehicles in the block" />
+          <StatTile label="Forecast volume" value={Math.round(forecast.predicted_values.traffic_volume).toLocaleString('en-IN')} sub={forecast.data_granularity === 'day' ? 'vehicles in the day' : 'vehicles in the block'} />
           <StatTile label="Forecast speed" value={`${forecast.predicted_values.average_speed.toFixed(1)} km/h`} />
           <StatTile label="Travel time index" value={forecast.predicted_values.travel_time_index.toFixed(2)} />
         </div>
@@ -472,7 +472,7 @@ function RouteCard({ route, index }) {
       <div className="route-card-head">
         <span className={`route-rank ${index === 0 ? 'route-rank-best' : ''}`}>{index === 0 ? <Check size={16} /> : index + 1}</span>
         <div className="route-choice-main"><b>{minutes(route.baseline_duration_s)} <small>· {km(route.distance_m)}</small></b>
-          <span>{route.source_type === 'google_route' ? `Google traffic-aware travel time${delay != null ? ` · traffic adds about ${Math.round(delay / 60)} min` : ''}` : 'Estimated corridor (road routing unavailable)'}</span></div>
+          <span>{route.source_type === 'google_route' ? `Google traffic-aware travel time${delay != null ? ` · traffic adds about ${Math.round(delay / 60)} min` : ''}` : route.source_type === 'osm_route' ? 'OpenStreetMap road route · estimated travel time' : route.source_type === 'local_osm_route' ? 'Local OpenStreetMap road route · dynamic replanning' : 'Estimated corridor (road routing unavailable)'}</span></div>
         <StatTile label="Route risk" value={`${Math.round(route.risk_score)}/100`} sub={`${band} risk`} tone={band} />
       </div>
       {route.restricted && <div className="inline-error"><AlertTriangle size={14} /> An official road closure is on this route when you would reach it.</div>}
@@ -485,6 +485,7 @@ function RouteCard({ route, index }) {
       {route.roads?.length > 0 && <div className="road-steps">{route.roads.map(r => (
         <div className="road-step" key={r.segment_id} title={`${METHOD_LABELS[r.method] || r.method}, ${r.confidence} confidence`}>
           <LevelBadge value={r.predicted_class} compact /><span>{r.road}</span><small>{dateTime(r.passes_at)} · {METHOD_LABELS[r.method] || r.method}{r.planned_pcu ? ` · ${r.planned_pcu} planned PCU` : ''}</small>
+          {r.fusion?.applied && <small>Includes a verified {r.fusion.sources[0]?.source_type === 'camera' ? 'CCTV' : 'traffic'} reading, {r.fusion.sources[0]?.age_minutes} minutes old.</small>}
         </div>))}</div>}
       {route.incidents?.length > 0 && <ul className="evidence-list">{route.incidents.map(i => <li key={i.incident_id}>{CATEGORY_LABELS[i.category] || label(i.category)} {i.distance_m} m from the route{i.official ? ' (official notice)' : ''}{i.closure ? ' · road closed' : ''}</li>)}</ul>}
       {route.data_gaps?.length > 0 && <small className="form-hint">{route.data_gaps.join(' ')}</small>}
@@ -520,7 +521,7 @@ function DepartureAdvice({ advice }) {
 const AUTO_CHECK_GAP_MS = 2 * 60 * 1000;
 const PERIODIC_CHECK_MS = 10 * 60 * 1000;
 
-export function JourneyMonitor({ route, destination, setToast, onReroute, onRouteChange }) {
+export function JourneyMonitor({ route, destination, setToast, onReroute, onRouteChange, onMonitoringChange }) {
   const [journey, setJourney] = useState(null);
   const [status, setStatus] = useState(null);
   const [alerts, setAlerts] = useState([]);
@@ -532,9 +533,11 @@ export function JourneyMonitor({ route, destination, setToast, onReroute, onRout
   const lastCheck = useRef(0);
   const positionRef = useRef(null);
   const followRef = useRef(true);
+  const journeyRef = useRef(null);
   followRef.current = follow;
   useEffect(() => () => {
     if (watchRef.current != null) navigator.geolocation?.clearWatch(watchRef.current);
+    if (journeyRef.current) post(`/api/journeys/${journeyRef.current.journey_id}/end`).catch(() => {});
     publish('live-position', null);
   }, []);
   useEffect(() => {
@@ -542,11 +545,16 @@ export function JourneyMonitor({ route, destination, setToast, onReroute, onRout
     const timer = setInterval(() => checkRoutes(journey.journey_id, true), PERIODIC_CHECK_MS);
     return () => clearInterval(timer);
   }, [journey]);
+  useEffect(() => subscribe('traffic-changed', () => {
+    if (journey) checkRoutes(journey.journey_id, true);
+  }), [journey]);
   async function start() {
     if (!navigator.geolocation) { setToast('Location is not available in this browser.'); return; }
     try {
       const created = await post('/api/journeys', { coordinates: route.geometry.coordinates, destination_lat: destination.latitude, destination_lon: destination.longitude });
+      journeyRef.current = created;
       setJourney(created);
+      onMonitoringChange?.({ route, destination });
       setStatus({ status: 'waiting', message: 'Waiting for your location…' });
       watchRef.current = navigator.geolocation.watchPosition(position => {
         const { latitude, longitude, accuracy } = position.coords;
@@ -580,7 +588,10 @@ export function JourneyMonitor({ route, destination, setToast, onReroute, onRout
       const result = await post(`/api/journeys/${journeyId}/better-route`, { latitude: here.latitude, longitude: here.longitude, accuracy_m: here.accuracy });
       if (result.better) setOffer(result);
       else if (!automatic) setToast(result.message);
-    } catch (err) { if (!automatic) setToast(err.message); } finally { setChecking(false); }
+    } catch (err) {
+      if (err.code === 'no_open_route') { setOffer(null); setStatus({ status: 'blocked', message: err.message }); }
+      else if (!automatic) setToast(err.message);
+    } finally { setChecking(false); }
   }
   async function switchRoute() {
     try {
@@ -595,8 +606,10 @@ export function JourneyMonitor({ route, destination, setToast, onReroute, onRout
     watchRef.current = null;
     publish('live-position', null);
     if (notifyServer && journey) await post(`/api/journeys/${journey.journey_id}/end`).catch(() => {});
+    journeyRef.current = null;
     setJourney(null);
     setOffer(null);
+    onMonitoringChange?.(null);
   }
   return (
     <section className="card journey-monitor">
@@ -604,6 +617,7 @@ export function JourneyMonitor({ route, destination, setToast, onReroute, onRout
       {!journey ? <button className="button button-primary" onClick={start}><Navigation size={15} /> Start monitoring this route</button> : (
         <>
           <div className="monitor-status"><span className="coverage-signal" /><b>{status?.status === 'on_route' ? `On route · ${status.progress_pct}% done · ${km(status.distance_remaining_m)} left` : status?.status === 'off_route' ? 'You appear to be off the planned route' : status?.status === 'low_accuracy' ? 'Waiting for a more accurate location' : status?.status === 'arrived' ? 'Arrived' : 'Monitoring'}</b><small>{status?.message}</small></div>
+          <p className="form-hint">Monitoring your accepted route to {destination.label || 'the selected destination'}. New suggestions take effect when you choose “Switch to this route”.</p>
           {offer && <div className="route-offer" role="status"><b>{offer.message}</b><div className="route-offer-actions"><button className="button button-primary" onClick={switchRoute}><Route size={14} /> Switch to this route</button><button className="button button-secondary" onClick={() => setOffer(null)}>Keep my route</button></div></div>}
           {status?.suggestion && !offer && <div className="inline-error">{status.suggestion.message} <button className="text-action" onClick={() => onReroute?.(status.suggestion.from)}>Compare all routes from here</button></div>}
           {alerts.map(a => <div className="evidence-item" key={a.incident_id}><AlertTriangle size={14} /> {CATEGORY_LABELS[a.category] || label(a.category)} about {a.distance_ahead_m} m ahead{a.closure ? ' (road closed)' : ''}</div>)}
@@ -626,24 +640,62 @@ export function StartJourney({ setToast, places, pins, googleRouting }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [publicIncidents, setPublicIncidents] = useState([]);
+  const [monitoredRoute, setMonitoredRoute] = useState(null);
+  const requestRef = useRef(null);
+  const revisionRef = useRef(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
   useEffect(() => { api('/api/incidents/public').then(b => setPublicIncidents(b.incidents)).catch(() => {}); }, []);
+  useEffect(() => {
+    let active = true;
+    let refreshing = false;
+    const refreshTraffic = async () => {
+      if (!requestRef.current || refreshing) return;
+      refreshing = true;
+      const request = requestRef.current;
+      try {
+        const state = await api('/api/routes/state');
+        if (!active) return;
+        if (revisionRef.current && state.revision !== revisionRef.current) {
+          publish('traffic-changed', state.revision);
+          const incidents = await api('/api/incidents/public');
+          if (active) setPublicIncidents(incidents.incidents);
+          const next = await api(`/api/routes?${request.query}`);
+          if (active && request === requestRef.current) { setResult({ ...next, ...request.points }); setUpdatedAt(new Date()); setError(''); }
+        }
+        if (request === requestRef.current) revisionRef.current = state.revision;
+      } catch (err) {
+        if (active && request === requestRef.current) {
+          setError(err.code === 'no_open_route' ? err.message : `Could not refresh conditions. Displayed routes may be out of date. ${err.message}`);
+          if (err.code === 'no_open_route') setResult(null);
+        }
+      } finally { refreshing = false; }
+    };
+    const timer = setInterval(refreshTraffic, 15000);
+    window.addEventListener('focus', refreshTraffic);
+    return () => { active = false; clearInterval(timer); window.removeEventListener('focus', refreshTraffic); };
+  }, []);
   async function compare(from = origin, to = destination) {
     if (!from || !to) { setError('Choose a starting point and a destination.'); return; }
     setBusy(true);
     setError('');
     setResult(null);
+    requestRef.current = null;
     try {
       await Promise.allSettled([post(`/api/weather/fetch?latitude=${from.latitude}&longitude=${from.longitude}`), post(`/api/weather/fetch?latitude=${to.latitude}&longitude=${to.longitude}`)]);
       const query = new URLSearchParams({ origin_lat: from.latitude, origin_lon: from.longitude, destination_lat: to.latitude, destination_lon: to.longitude });
       if (departure) query.set('departure_at', new Date(departure).toISOString());
-      setResult({ ...(await api(`/api/routes?${query}`)), origin: from, destination: to });
+      requestRef.current = { query: query.toString(), points: { origin: from, destination: to } };
+      const next = await api(`/api/routes?${query}`);
+      revisionRef.current = next.revision;
+      setResult({ ...next, origin: from, destination: to });
+      setUpdatedAt(new Date());
     } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   const best = result?.routes?.[0];
   return (
     <>
       <Heading eyebrow="JOURNEY START" title="Compare routes" subtitle="Routes are scored on traffic, planned demand, accidents and hazards, official notices, and weather, at the time you reach each road." />
-      {!googleRouting && <div className="model-warning"><MapPin size={16} /><span><b>Google routing is not configured.</b> Routes are shown as estimated straight-line corridors until a Google Maps key is added.</span></div>}
+      {!googleRouting && <div className="notice-strip"><MapPin size={16} /><span><b>OpenStreetMap road routing.</b> Search a Bengaluru place or choose points on the map. Traffic estimates are available where observations exist.</span></div>}
       <section className="card form-card">
         <form className="incident-form" onSubmit={e => { e.preventDefault(); compare(); }}>
           <PlacePicker label="Starting point" places={places} value={origin} onChange={setOrigin} pin={pins?.origin && { ...pins.origin, id: 'pin' }} />
@@ -656,15 +708,20 @@ export function StartJourney({ setToast, places, pins, googleRouting }) {
       {best && (
         <>
           <TravelNotes notes={result.travel_notes} />
+          <p className="form-hint" role="status">Road conditions are checked automatically. Last route update: {updatedAt ? dateTime(updatedAt.toISOString()) : 'now'}.</p>
           <div className="card route-results-map"><RoutePreviewMap routes={result.routes} incidents={publicIncidents} /></div>
           <div className="route-card-list">{result.routes.map((route, index) => <RouteCard key={route.route_index} route={route} index={index} />)}</div>
           <DepartureAdvice advice={best.departure_advice} />
-          <JourneyMonitor route={best} destination={result.destination} setToast={setToast}
-            onReroute={from => { const point = { id: 'here', label: 'Current location', ...from }; setOrigin(point); compare(point, result.destination); }}
-            onRouteChange={route => setResult(previous => ({ ...previous, routes: [route], travel_notes: [] }))} />
           <div className="route-notice"><AlertTriangle size={15} />{result.notice} <b>Confirm conditions before travelling.</b></div>
         </>
       )}
+      {(best || monitoredRoute) && <JourneyMonitor route={monitoredRoute?.route || best} destination={monitoredRoute?.destination || result.destination} setToast={setToast}
+        onMonitoringChange={setMonitoredRoute}
+        onReroute={from => { const point = { id: 'here', label: 'Current location', ...from }; setOrigin(point); compare(point, monitoredRoute?.destination || result.destination); }}
+        onRouteChange={route => {
+          setMonitoredRoute(previous => previous ? { ...previous, route } : previous);
+          setResult(previous => ({ ...(previous || {}), destination: monitoredRoute?.destination || previous?.destination, routes: [route], travel_notes: [] }));
+        }} />}
     </>
   );
 }

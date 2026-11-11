@@ -1,0 +1,786 @@
+{
+  "version": "daily-history-20261111-034316",
+  "kind": "daily_history_challenger",
+  "family": "extra_trees_leaf2",
+  "scope": "Historical re-evaluation on previously inspected public daily data; not a new untouched test or the missing six-block archive.",
+  "task": "Daily severity outlook using only earlier available history, last observation no older than seven days.",
+  "selection": "Validation only; prefer majority-accuracy and supported-class-recall feasibility, then macro-F1.",
+  "input_rule": "Target-day measurements and all later observations are excluded; no gaps are filled with invented records.",
+  "split": {
+    "train_before": "2023-10-26",
+    "test_from": "2024-03-04"
+  },
+  "sizes": {
+    "train": 6102,
+    "validation": 1236,
+    "test": 1461
+  },
+  "classes": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "test": {
+    "count": 1461,
+    "accuracy": 0.7461,
+    "macro_f1": 0.4776,
+    "per_class": {
+      "Low": {
+        "precision": 0.2222,
+        "recall": 0.1096,
+        "f1": 0.1468,
+        "support": 73
+      },
+      "Medium": {
+        "precision": 0.4821,
+        "recall": 0.3941,
+        "f1": 0.4337,
+        "support": 307
+      },
+      "High": {
+        "precision": 0.8186,
+        "recall": 0.889,
+        "f1": 0.8523,
+        "support": 1081
+      }
+    },
+    "confusion_matrix": [
+      [
+        8,
+        25,
+        40
+      ],
+      [
+        13,
+        121,
+        173
+      ],
+      [
+        15,
+        105,
+        961
+      ]
+    ]
+  },
+  "baselines_test": {
+    "majority": {
+      "count": 1461,
+      "accuracy": 0.7399,
+      "macro_f1": 0.2835,
+      "per_class": {
+        "Low": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 73
+        },
+        "Medium": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 307
+        },
+        "High": {
+          "precision": 0.7399,
+          "recall": 1.0,
+          "f1": 0.8505,
+          "support": 1081
+        }
+      },
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          73
+        ],
+        [
+          0,
+          0,
+          307
+        ],
+        [
+          0,
+          0,
+          1081
+        ]
+      ]
+    },
+    "persistence": {
+      "count": 1461,
+      "accuracy": 0.6509,
+      "macro_f1": 0.3921,
+      "per_class": {
+        "Low": {
+          "precision": 0.0704,
+          "recall": 0.0685,
+          "f1": 0.0694,
+          "support": 73
+        },
+        "Medium": {
+          "precision": 0.3205,
+          "recall": 0.3257,
+          "f1": 0.3231,
+          "support": 307
+        },
+        "High": {
+          "precision": 0.7848,
+          "recall": 0.7826,
+          "f1": 0.7837,
+          "support": 1081
+        }
+      },
+      "confusion_matrix": [
+        [
+          5,
+          20,
+          48
+        ],
+        [
+          23,
+          100,
+          184
+        ],
+        [
+          43,
+          192,
+          846
+        ]
+      ]
+    },
+    "historical_profile": {
+      "count": 1461,
+      "accuracy": 0.7591,
+      "macro_f1": 0.4067,
+      "per_class": {
+        "Low": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 73
+        },
+        "Medium": {
+          "precision": 0.5217,
+          "recall": 0.2736,
+          "f1": 0.359,
+          "support": 307
+        },
+        "High": {
+          "precision": 0.7885,
+          "recall": 0.9482,
+          "f1": 0.861,
+          "support": 1081
+        }
+      },
+      "confusion_matrix": [
+        [
+          0,
+          21,
+          52
+        ],
+        [
+          0,
+          84,
+          223
+        ],
+        [
+          0,
+          56,
+          1025
+        ]
+      ]
+    }
+  },
+  "acceptance": {
+    "passed": true,
+    "rules": {
+      "min_macro_f1_gain_over_best_baseline": 0.02,
+      "lstm_must_beat_rf_without_lstm": true,
+      "accuracy_at_least_majority_baseline": true,
+      "every_class_recalled_when_support_at_least": 5,
+      "max_macro_f1_drop_vs_active_model": 0.01
+    },
+    "checks": [
+      {
+        "check": "macro-F1 beats the best baseline (historical_profile) by at least 0.02",
+        "passed": true,
+        "value": 0.4776,
+        "threshold": 0.4267
+      },
+      {
+        "check": "accuracy is at least the majority-class baseline",
+        "passed": true,
+        "value": 0.7461,
+        "threshold": 0.7399
+      },
+      {
+        "check": "every class with at least 5 test records is predicted correctly at least once",
+        "passed": true,
+        "value": "all classes recalled"
+      }
+    ]
+  },
+  "common_six_day_test": {
+    "count": 225,
+    "accuracy": 0.8889,
+    "macro_f1": 0.3137,
+    "per_class": {
+      "Low": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 7
+      },
+      "Medium": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 18
+      },
+      "High": {
+        "precision": 0.8889,
+        "recall": 1.0,
+        "f1": 0.9412,
+        "support": 200
+      }
+    },
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        7
+      ],
+      [
+        0,
+        0,
+        18
+      ],
+      [
+        0,
+        0,
+        200
+      ]
+    ]
+  },
+  "validation_trials": [
+    {
+      "family": "random_forest_leaf2",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.75,
+        "macro_f1": 0.4401,
+        "per_class": {
+          "Low": {
+            "precision": 0.1667,
+            "recall": 0.0172,
+            "f1": 0.0312,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.469,
+            "recall": 0.4061,
+            "f1": 0.4353,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.8167,
+            "recall": 0.8942,
+            "f1": 0.8537,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            1,
+            25,
+            32
+          ],
+          [
+            3,
+            106,
+            152
+          ],
+          [
+            2,
+            95,
+            820
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 2,
+        "Medium": 1.5,
+        "High": 1
+      },
+      "feasible": true
+    },
+    {
+      "family": "random_forest_leaf8",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.7451,
+        "macro_f1": 0.4431,
+        "per_class": {
+          "Low": {
+            "precision": 0.1034,
+            "recall": 0.0517,
+            "f1": 0.069,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.4604,
+            "recall": 0.3563,
+            "f1": 0.4017,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.8209,
+            "recall": 0.8997,
+            "f1": 0.8585,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            3,
+            25,
+            30
+          ],
+          [
+            18,
+            93,
+            150
+          ],
+          [
+            8,
+            84,
+            825
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 1,
+        "Medium": 0.75,
+        "High": 1
+      },
+      "feasible": true
+    },
+    {
+      "family": "extra_trees_leaf2",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.7476,
+        "macro_f1": 0.4435,
+        "per_class": {
+          "Low": {
+            "precision": 0.1034,
+            "recall": 0.0517,
+            "f1": 0.069,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.4764,
+            "recall": 0.3487,
+            "f1": 0.4027,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.8169,
+            "recall": 0.9051,
+            "f1": 0.8588,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            3,
+            23,
+            32
+          ],
+          [
+            16,
+            91,
+            154
+          ],
+          [
+            10,
+            77,
+            830
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 1.5,
+        "Medium": 1,
+        "High": 1
+      },
+      "feasible": true
+    },
+    {
+      "family": "extra_trees_leaf8",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.7184,
+        "macro_f1": 0.4491,
+        "per_class": {
+          "Low": {
+            "precision": 0.0984,
+            "recall": 0.1034,
+            "f1": 0.1008,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.4208,
+            "recall": 0.387,
+            "f1": 0.4032,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.8353,
+            "recall": 0.8517,
+            "f1": 0.8434,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            6,
+            25,
+            27
+          ],
+          [
+            33,
+            101,
+            127
+          ],
+          [
+            22,
+            114,
+            781
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 0.75,
+        "Medium": 0.75,
+        "High": 1
+      },
+      "feasible": false
+    },
+    {
+      "family": "hist_gradient_balanced",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.6837,
+        "macro_f1": 0.4448,
+        "per_class": {
+          "Low": {
+            "precision": 0.1212,
+            "recall": 0.069,
+            "f1": 0.0879,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.379,
+            "recall": 0.5402,
+            "f1": 0.4455,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.8424,
+            "recall": 0.7634,
+            "f1": 0.8009,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            4,
+            30,
+            24
+          ],
+          [
+            13,
+            141,
+            107
+          ],
+          [
+            16,
+            201,
+            700
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 3,
+        "Medium": 1,
+        "High": 1
+      },
+      "feasible": false
+    },
+    {
+      "family": "hist_gradient_unweighted",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.746,
+        "macro_f1": 0.3601,
+        "per_class": {
+          "Low": {
+            "precision": 0.0909,
+            "recall": 0.0517,
+            "f1": 0.0659,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.561,
+            "recall": 0.0881,
+            "f1": 0.1523,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.7711,
+            "recall": 0.9771,
+            "f1": 0.862,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            3,
+            6,
+            49
+          ],
+          [
+            21,
+            23,
+            217
+          ],
+          [
+            9,
+            12,
+            896
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 3,
+        "Medium": 0.5,
+        "High": 1
+      },
+      "feasible": true
+    },
+    {
+      "family": "logistic_C01",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.627,
+        "macro_f1": 0.4382,
+        "per_class": {
+          "Low": {
+            "precision": 0.0872,
+            "recall": 0.2931,
+            "f1": 0.1344,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.3729,
+            "recall": 0.433,
+            "f1": 0.4007,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.874,
+            "recall": 0.7034,
+            "f1": 0.7795,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            17,
+            29,
+            12
+          ],
+          [
+            67,
+            113,
+            81
+          ],
+          [
+            111,
+            161,
+            645
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 0.5,
+        "Medium": 0.75,
+        "High": 1
+      },
+      "feasible": false
+    },
+    {
+      "family": "logistic_C1",
+      "validation": {
+        "count": 1236,
+        "accuracy": 0.6246,
+        "macro_f1": 0.4332,
+        "per_class": {
+          "Low": {
+            "precision": 0.0777,
+            "recall": 0.2586,
+            "f1": 0.1195,
+            "support": 58
+          },
+          "Medium": {
+            "precision": 0.375,
+            "recall": 0.4368,
+            "f1": 0.4035,
+            "support": 261
+          },
+          "High": {
+            "precision": 0.8701,
+            "recall": 0.7012,
+            "f1": 0.7766,
+            "support": 917
+          }
+        },
+        "confusion_matrix": [
+          [
+            15,
+            30,
+            13
+          ],
+          [
+            64,
+            114,
+            83
+          ],
+          [
+            114,
+            160,
+            643
+          ]
+        ]
+      },
+      "weights": {
+        "Low": 0.5,
+        "Medium": 0.75,
+        "High": 1
+      },
+      "feasible": false
+    }
+  ],
+  "decision_weights": {
+    "Low": 1.5,
+    "Medium": 1,
+    "High": 1
+  },
+  "columns": [
+    "day_ordinal",
+    "weekday",
+    "weekend",
+    "month_sin",
+    "month_cos",
+    "year_day_sin",
+    "year_day_cos",
+    "history_age_days",
+    "records_56_days",
+    "weekday_0",
+    "weekday_1",
+    "weekday_2",
+    "weekday_3",
+    "weekday_4",
+    "weekday_5",
+    "weekday_6",
+    "traffic_volume_last",
+    "traffic_volume_mean_7",
+    "traffic_volume_std_7",
+    "traffic_volume_mean_28",
+    "traffic_volume_std_28",
+    "traffic_volume_mean_56",
+    "traffic_volume_std_56",
+    "traffic_volume_same_weekday_mean",
+    "average_speed_last",
+    "average_speed_mean_7",
+    "average_speed_std_7",
+    "average_speed_mean_28",
+    "average_speed_std_28",
+    "average_speed_mean_56",
+    "average_speed_std_56",
+    "average_speed_same_weekday_mean",
+    "travel_time_index_last",
+    "travel_time_index_mean_7",
+    "travel_time_index_std_7",
+    "travel_time_index_mean_28",
+    "travel_time_index_std_28",
+    "travel_time_index_mean_56",
+    "travel_time_index_std_56",
+    "travel_time_index_same_weekday_mean",
+    "congestion_index_last",
+    "congestion_index_mean_7",
+    "congestion_index_std_7",
+    "congestion_index_mean_28",
+    "congestion_index_std_28",
+    "congestion_index_mean_56",
+    "congestion_index_std_56",
+    "congestion_index_same_weekday_mean",
+    "incident_reports_last",
+    "incident_reports_mean_7",
+    "incident_reports_std_7",
+    "incident_reports_mean_28",
+    "incident_reports_std_28",
+    "incident_reports_mean_56",
+    "incident_reports_std_56",
+    "incident_reports_same_weekday_mean",
+    "wet_last",
+    "wet_mean_7",
+    "wet_std_7",
+    "wet_mean_28",
+    "wet_std_28",
+    "wet_mean_56",
+    "wet_std_56",
+    "wet_same_weekday_mean",
+    "roadwork_flag_last",
+    "roadwork_flag_mean_7",
+    "roadwork_flag_std_7",
+    "roadwork_flag_mean_28",
+    "roadwork_flag_std_28",
+    "roadwork_flag_mean_56",
+    "roadwork_flag_std_56",
+    "roadwork_flag_same_weekday_mean",
+    "prior_Low_28",
+    "prior_Medium_28",
+    "prior_High_28",
+    "prior_Low_84",
+    "prior_Medium_84",
+    "prior_High_84",
+    "prior_Low_10000",
+    "prior_Medium_10000",
+    "prior_High_10000",
+    "road_electronic-city--hosur-road-29c7e5",
+    "road_electronic-city--silk-board-junction-f3d434",
+    "road_hebbal--ballari-road-f531d4",
+    "road_hebbal--hebbal-flyover-2a4396",
+    "road_indiranagar--100-feet-road-303336",
+    "road_indiranagar--cmh-road-2c76cc",
+    "road_jayanagar--jayanagar-4th-block-c06df9",
+    "road_jayanagar--south-end-circle-c9183b",
+    "road_koramangala--sarjapur-road-604b94",
+    "road_koramangala--sony-world-junction-012f38",
+    "road_mg-road--anil-kumble-circle-395acc",
+    "road_mg-road--trinity-circle-52cac6",
+    "road_whitefield--itpl-main-road-a385c8",
+    "road_whitefield--marathahalli-bridge-6f727f",
+    "road_yeshwanthpur--tumkur-road-9532b6",
+    "road_yeshwanthpur--yeshwanthpur-circle-90d1a7"
+  ],
+  "data_fingerprint": "6db7fd3a8cfa5802cf27bf32567a4d23e14418b8952903bcf02f63bf431af6b7",
+  "software": {
+    "numpy": "2.3.5",
+    "pandas": "2.2.3",
+    "scikit-learn": "1.9.1",
+    "tensorflow": "2.21.0"
+  },
+  "training_seconds": 48.81
+}

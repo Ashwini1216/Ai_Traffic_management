@@ -1,0 +1,192 @@
+{
+  "graph": {
+    "available": true,
+    "directed_edges": 1038087,
+    "nodes": 456292,
+    "geometry_points": 1113673,
+    "simplified": true,
+    "coverage": {
+      "scope": "bengaluru_wide",
+      "coverage": "Entire supported Bengaluru region with 2 km boundary buffer",
+      "bounds": [
+        12.7,
+        77.3,
+        13.25,
+        77.9
+      ],
+      "buffer_degrees": 0.02,
+      "source": "https://download.geofabrik.de/asia/india/southern-zone-latest.osm.pbf",
+      "source_sha256": "c4d5593993345dde1c34e47033a2ae217c2dfa0992bf7340e4707fbcc924b944",
+      "osm_timestamp": "2026-11-09T21:22:17Z",
+      "built_at": "2026-11-10T17:06:53.338146+00:00",
+      "attribution": "\u00a9 OpenStreetMap contributors, ODbL; extract by Geofabrik",
+      "ways": 258424,
+      "nodes": 1046500,
+      "restriction_relations": 438,
+      "notice": "Real mapped road geometry, not live traffic. Unmapped roads and access restrictions can limit routing.",
+      "mapped_city_boundary": {
+        "osm_id": 7902476,
+        "bbox": [
+          12.8334905,
+          77.4598797,
+          13.1426196,
+          77.7840639
+        ],
+        "contained": true
+      }
+    },
+    "turn_restrictions": 231,
+    "conservatively_blocked_complex_restrictions": 190
+  },
+  "load_seconds": 9.066,
+  "cases": [
+    {
+      "name": "Indiranagar\u2013Hebbal",
+      "passed": true,
+      "distance_m": 11919,
+      "seconds": 1.889,
+      "astar_seconds": 0.217,
+      "cost_matches_astar": true,
+      "geometry_points": 420,
+      "snap_distance_m": [
+        31,
+        15
+      ],
+      "expanded_states": 173691,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 0.227,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "Kengeri\u2013Whitefield",
+      "passed": true,
+      "distance_m": 34588,
+      "seconds": 5.937,
+      "astar_seconds": 1.156,
+      "cost_matches_astar": true,
+      "geometry_points": 1107,
+      "snap_distance_m": [
+        9,
+        64
+      ],
+      "expanded_states": 700686,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 0.875,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "Central Bengaluru\u2013Electronic City",
+      "passed": true,
+      "distance_m": 21077,
+      "seconds": 2.024,
+      "astar_seconds": 0.476,
+      "cost_matches_astar": true,
+      "geometry_points": 619,
+      "snap_distance_m": [
+        71,
+        69
+      ],
+      "expanded_states": 228799,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 0.313,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "Hoskote\u2013Yeshwanthpur",
+      "passed": true,
+      "distance_m": 35759,
+      "seconds": 6.05,
+      "astar_seconds": 0.57,
+      "cost_matches_astar": true,
+      "geometry_points": 904,
+      "snap_distance_m": [
+        77,
+        5
+      ],
+      "expanded_states": 794021,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 0.765,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "Bannerghatta\u2013Yelahanka",
+      "passed": true,
+      "distance_m": 38568,
+      "seconds": 8.226,
+      "astar_seconds": 0.919,
+      "cost_matches_astar": true,
+      "geometry_points": 1170,
+      "snap_distance_m": [
+        55,
+        34
+      ],
+      "expanded_states": 1045130,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 0.454,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "Nagarbhavi\u2013Sarjapur",
+      "passed": true,
+      "distance_m": 37847,
+      "seconds": 5.302,
+      "astar_seconds": 1.395,
+      "cost_matches_astar": true,
+      "geometry_points": 1142,
+      "snap_distance_m": [
+        25,
+        7
+      ],
+      "expanded_states": 572922,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 3.368,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "City centre\u2013airport",
+      "passed": true,
+      "distance_m": 37030,
+      "seconds": 2.616,
+      "astar_seconds": 0.886,
+      "cost_matches_astar": true,
+      "geometry_points": 832,
+      "snap_distance_m": [
+        50,
+        15
+      ],
+      "expanded_states": 215305,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 2.109,
+      "reopened_matches_original": true
+    },
+    {
+      "name": "Nelamangala\u2013Attibele",
+      "passed": true,
+      "distance_m": 61765,
+      "seconds": 8.071,
+      "astar_seconds": 1.385,
+      "cost_matches_astar": true,
+      "geometry_points": 1498,
+      "snap_distance_m": [
+        27,
+        15
+      ],
+      "expanded_states": 976381,
+      "closure_repair_matches_astar": true,
+      "closure_avoided": true,
+      "repair_seconds": 2.157,
+      "reopened_matches_original": true
+    }
+  ],
+  "source": "Real Geofabrik/OpenStreetMap extract; all routes computed locally.",
+  "checked_at": "2026-11-10T17:20:29.488170+00:00",
+  "peak_rss_gib": 2.318,
+  "passed": true
+}

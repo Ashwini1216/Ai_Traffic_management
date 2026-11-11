@@ -85,6 +85,8 @@ class CameraFootage(Base):
 
 class TrafficObservation(Base):
     __tablename__ = "traffic_observations"
+    time_granularity: Mapped[str | None] = mapped_column(String)
+    congestion_index: Mapped[float | None] = mapped_column(Float)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     source_type: Mapped[str] = mapped_column(String, nullable=False)
     source_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -156,6 +158,8 @@ class Camera(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     consecutive_failures: Mapped[int | None] = mapped_column(Integer)
     segment_id: Mapped[str | None] = mapped_column(String)
+    measurement_validated: Mapped[int | None] = mapped_column(Integer)
+    validation_note: Mapped[str | None] = mapped_column(Text)
 
 
 class Incident(Base):
@@ -265,6 +269,7 @@ class ModelPrediction(Base):
     predicted_values_json: Mapped[str | None] = mapped_column(Text)
     observed_values_json: Mapped[str | None] = mapped_column(Text)
     errors_json: Mapped[str | None] = mapped_column(Text)
+    outcome_observation_id: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (Index("ix_predictions_target", "target_date", "target_time_block"),)
 
 
@@ -583,6 +588,7 @@ def initialize() -> None:
 
 
 OBSERVATION_V2_COLUMNS = {
+    "time_granularity":"TEXT", "congestion_index":"FLOAT",
     "segment_id": "TEXT", "observed_start": "TEXT", "observed_end": "TEXT", "interval_seconds": "INTEGER",
     "vehicle_count": "INTEGER", "flow_per_hour": "FLOAT", "occupancy": "FLOAT", "queue_length": "FLOAT",
     "precipitation_mm": "FLOAT", "temperature_c": "FLOAT", "weather_snapshot_id": "INTEGER",
@@ -596,6 +602,7 @@ INCIDENT_V2_COLUMNS = {
     "duplicate_of": "TEXT", "updated_at": "TEXT",
 }
 CAMERA_V2_COLUMNS = {
+    "measurement_validated":"INTEGER", "validation_note":"TEXT",
     "stream_url": "TEXT", "collection_interval_seconds": "INTEGER", "sample_seconds": "INTEGER", "counting_line_json": "TEXT",
     "roi_json": "TEXT", "last_attempt_at": "TEXT", "last_error": "TEXT", "consecutive_failures": "INTEGER", "segment_id": "TEXT",
 }
@@ -606,6 +613,7 @@ TRIP_V2_COLUMNS = {
     "last_assessment_json": "TEXT", "last_assessed_at": "TEXT", "updated_at": "TEXT",
 }
 PREDICTION_V2_COLUMNS = {
+    "outcome_observation_id": "INTEGER",
     "segment_id": "TEXT", "target_start": "TEXT", "method": "TEXT", "horizon_blocks": "INTEGER", "confidence": "FLOAT",
     "predicted_values_json": "TEXT", "observed_values_json": "TEXT", "errors_json": "TEXT",
 }

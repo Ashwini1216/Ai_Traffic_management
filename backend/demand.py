@@ -1,7 +1,7 @@
 """Planned journeys and the future travel demand they add, weighted by vehicle type.
 
-Each planned trip is routed (Google Routes when configured, otherwise a clearly flagged
-straight-line estimate), matched to the registered roads it passes, and given the time it
+Each planned trip is routed on Google or OpenStreetMap roads,
+matched to the registered roads it passes, and given the time it
 should reach each one. Demand is the sum of passenger-car units (PCU) expected on a road in a
 time block. Planned trips are intentions, not confirmed vehicles, and are only reported in
 aggregate; corridor groups with too few trips are suppressed to protect privacy.
@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 import core
 import places
 import store
+import road_routing
 from core import iso_now
 from security import _decode_bearer, authority_token, citizen_token
 
@@ -79,8 +80,8 @@ def _resolve_points(payload: TripInput) -> tuple[float, float, float, float]:
 
 
 def plan_route(origin: tuple[float, float], destination: tuple[float, float], departure: datetime) -> dict:
-    """Route geometry, distance, and duration; Google when available, otherwise an estimate."""
-    if core.google_configured():
+    """Actual road geometry, distance and estimated duration from Google or OpenStreetMap."""
+    if road_routing.provider() == "google":
         request = {
             "origin": {"location": {"latLng": {"latitude": origin[0], "longitude": origin[1]}}},
             "destination": {"location": {"latLng": {"latitude": destination[0], "longitude": destination[1]}}},
@@ -96,17 +97,14 @@ def plan_route(origin: tuple[float, float], destination: tuple[float, float], de
                 return {"source": "google_route", "polyline": encoded, "coordinates": core.decode_google_polyline(encoded),
                         "distance_m": float(route.get("distanceMeters", 0)), "duration_s": float(str(route.get("duration", "0s")).removesuffix("s"))}
         except HTTPException:
-            pass  # fall back to the estimate below, which is labelled as such
-    straight = core.haversine_m(origin[0], origin[1], destination[0], destination[1])
-    distance = straight * ROAD_CIRCUITY
-    return {"source": "straight_line_estimate", "polyline": None,
-            "coordinates": [[origin[1], origin[0]], [destination[1], destination[0]]],
-            "distance_m": distance, "duration_s": distance / (ESTIMATE_SPEED_KMH / 3.6)}
+            pass  # try the explicitly labelled OpenStreetMap road provider
+    route = road_routing.candidates(origin, destination, departure=departure)[0]
+    return {**route, "polyline": road_routing.encode_polyline(route["coordinates"])}
 
 
 def associate(route: dict) -> list[dict]:
     """Registered roads near the route, with the expected seconds after departure to reach each."""
-    corridor = GOOGLE_CORRIDOR_M if route["source"] == "google_route" else ESTIMATE_CORRIDOR_M
+    corridor = ESTIMATE_CORRIDOR_M if route["source"] == "straight_line_estimate" else GOOGLE_CORRIDOR_M
     length = core.polyline_length_m(route["coordinates"]) or 1.0
     matches = []
     for segment in store.rows("SELECT segment_id,latitude,longitude FROM road_segments WHERE latitude IS NOT NULL"):

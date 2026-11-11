@@ -1,0 +1,2931 @@
+{
+  "available": true,
+  "generated_at": "2026-11-11T05:17:57.817779+00:00",
+  "forecast": {
+    "source": {
+      "source": "https://www.kaggle.com/datasets/preethamgouda/banglore-city-traffic-dataset",
+      "licence": "CC0: Public Domain (publisher metadata)",
+      "archive_sha256": "09202e1aeaff512980a15009d18e328a5cd75d386a98df6ea150629776d68998",
+      "audited_at": "2026-11-10T16:46:08.085301+00:00",
+      "rows": 8936,
+      "roads": 16,
+      "date_range": [
+        "2022-01-01",
+        "2024-08-09"
+      ],
+      "time_granularity": "day",
+      "time_of_day_available": false,
+      "severity_rule": "Low: index < 100/3; Medium: 100/3 <= index < 200/3; High: index >= 200/3. Project-defined equal-third severity bins, not sensor ground-truth labels.",
+      "class_counts": {
+        "High": 6568,
+        "Medium": 1910,
+        "Low": 458
+      },
+      "warning": "Public publisher data, not independently verified Bengaluru sensor records. This is not the missing six-block project archive."
+    },
+    "candidates": [
+      {
+        "version": "daily-hybrid-20261110-164655",
+        "kind": "daily_hybrid_lstm_rf",
+        "status": "rejected",
+        "test": {
+          "count": 225,
+          "accuracy": 0.7956,
+          "macro_f1": 0.2991,
+          "per_class": {
+            "Low": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 7
+            },
+            "Medium": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 18
+            },
+            "High": {
+              "precision": 0.8995,
+              "recall": 0.895,
+              "f1": 0.8972,
+              "support": 200
+            }
+          },
+          "confusion_matrix": [
+            [
+              0,
+              3,
+              4
+            ],
+            [
+              2,
+              0,
+              16
+            ],
+            [
+              12,
+              9,
+              179
+            ]
+          ]
+        },
+        "acceptance_passed": false
+      },
+      {
+        "version": "daily-rf-20261110-164655",
+        "kind": "daily_random_forest",
+        "status": "rejected",
+        "test": {
+          "count": 225,
+          "accuracy": 0.8489,
+          "macro_f1": 0.3076,
+          "per_class": {
+            "Low": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 7
+            },
+            "Medium": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 18
+            },
+            "High": {
+              "precision": 0.8925,
+              "recall": 0.955,
+              "f1": 0.9227,
+              "support": 200
+            }
+          },
+          "confusion_matrix": [
+            [
+              0,
+              2,
+              5
+            ],
+            [
+              0,
+              0,
+              18
+            ],
+            [
+              0,
+              9,
+              191
+            ]
+          ]
+        },
+        "acceptance_passed": false
+      }
+    ],
+    "baselines": {
+      "majority": {
+        "count": 225,
+        "accuracy": 0.8889,
+        "macro_f1": 0.3137,
+        "per_class": {
+          "Low": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          },
+          "Medium": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 18
+          },
+          "High": {
+            "precision": 0.8889,
+            "recall": 1.0,
+            "f1": 0.9412,
+            "support": 200
+          }
+        },
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            7
+          ],
+          [
+            0,
+            0,
+            18
+          ],
+          [
+            0,
+            0,
+            200
+          ]
+        ]
+      },
+      "persistence": {
+        "count": 225,
+        "accuracy": 0.7778,
+        "macro_f1": 0.3096,
+        "per_class": {
+          "Low": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          },
+          "Medium": {
+            "precision": 0.0455,
+            "recall": 0.0556,
+            "f1": 0.05,
+            "support": 18
+          },
+          "High": {
+            "precision": 0.8878,
+            "recall": 0.87,
+            "f1": 0.8788,
+            "support": 200
+          }
+        },
+        "confusion_matrix": [
+          [
+            0,
+            2,
+            5
+          ],
+          [
+            0,
+            1,
+            17
+          ],
+          [
+            7,
+            19,
+            174
+          ]
+        ]
+      },
+      "historical_profile": {
+        "count": 225,
+        "accuracy": 0.8311,
+        "macro_f1": 0.3396,
+        "per_class": {
+          "Low": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          },
+          "Medium": {
+            "precision": 0.1,
+            "recall": 0.1111,
+            "f1": 0.1053,
+            "support": 18
+          },
+          "High": {
+            "precision": 0.9024,
+            "recall": 0.925,
+            "f1": 0.9136,
+            "support": 200
+          }
+        },
+        "confusion_matrix": [
+          [
+            0,
+            3,
+            4
+          ],
+          [
+            0,
+            2,
+            16
+          ],
+          [
+            0,
+            15,
+            185
+          ]
+        ]
+      }
+    },
+    "split": {
+      "method": "chronological by target date: 70% train, 15% validation, 15% test",
+      "train_before": "2023-10-26",
+      "test_from": "2024-03-04"
+    },
+    "notice": "Daily publisher data only. The separate original block archive is now restored. Daily Low/Medium/High are project-defined bins of the source index, not verified sensor labels."
+  },
+  "vehicles": {
+    "source": "https://sites.google.com/view/daweidu/projects/ua-detrac",
+    "evaluated_at": "2026-11-10T16:56:07.009974+00:00",
+    "scope": "Six public Chinese traffic scenes; 15 seconds each. Not a Bengaluru camera-site calibration or all-weather guarantee.",
+    "classes": "All vehicles combined; per-class accuracy not claimed because source/COCO taxonomies differ.",
+    "results": {
+      "baseline": {
+        "settings": {
+          "weights": "yolov8n.pt",
+          "imgsz": 640,
+          "conf": 0.35,
+          "agnostic_nms": false
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 9771,
+          "predicted_vehicle_instances": 7303,
+          "count_mae": 3.3564,
+          "count_wape": 0.2583,
+          "precision_iou50": 0.9426,
+          "recall_iou50": 0.7045,
+          "f1_iou50": 0.8064,
+          "tp": 6884,
+          "fp": 419,
+          "fn": 2887,
+          "crossing_absolute_error": 11,
+          "reference_crossings": 32,
+          "distinct_count_absolute_error": 42,
+          "reference_distinct_vehicles": 86
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_39051",
+            "split": "test",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 399,
+            "predicted_vehicle_instances": 366,
+            "count_mae": 0.2606,
+            "count_wape": 0.1228,
+            "precision_iou50": 0.9372,
+            "recall_iou50": 0.8596,
+            "f1_iou50": 0.8967,
+            "tp": 343,
+            "fp": 23,
+            "fn": 56,
+            "processing_seconds": 3.78,
+            "counting_line": [
+              [
+                0.5,
+                0.35
+              ],
+              [
+                0.5,
+                1
+              ]
+            ],
+            "annotation_sha256": "c379907766c26646c08eb9716e28df055a64d7ab881aa985019ae9c0f5ccc863",
+            "reference_crossings": {
+              "in": 9,
+              "out": 0,
+              "total": 9
+            },
+            "predicted_crossings": {
+              "in": 6,
+              "out": 0,
+              "total": 6
+            },
+            "crossing_absolute_error": 3,
+            "reference_distinct_vehicles": 12,
+            "predicted_distinct_tracks": 12,
+            "distinct_count_absolute_error": 0
+          },
+          {
+            "sequence": "MVI_39501",
+            "split": "test",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1601,
+            "predicted_vehicle_instances": 986,
+            "count_mae": 3.484,
+            "count_wape": 0.4091,
+            "precision_iou50": 0.8996,
+            "recall_iou50": 0.554,
+            "f1_iou50": 0.6857,
+            "tp": 887,
+            "fp": 99,
+            "fn": 714,
+            "processing_seconds": 3.7,
+            "counting_line": [
+              [
+                0.1,
+                0.6
+              ],
+              [
+                0.9,
+                0.6
+              ]
+            ],
+            "annotation_sha256": "d2e519ea3e6990b7eef5ff7fbba50803c5914a0b23d6d113baa028c1a2f0e6e0",
+            "reference_crossings": {
+              "in": 12,
+              "out": 0,
+              "total": 12
+            },
+            "predicted_crossings": {
+              "in": 13,
+              "out": 0,
+              "total": 13
+            },
+            "crossing_absolute_error": 1,
+            "reference_distinct_vehicles": 23,
+            "predicted_distinct_tracks": 29,
+            "distinct_count_absolute_error": 6
+          },
+          {
+            "sequence": "MVI_40863",
+            "split": "test",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 4230,
+            "predicted_vehicle_instances": 2735,
+            "count_mae": 7.9521,
+            "count_wape": 0.3534,
+            "precision_iou50": 0.9141,
+            "recall_iou50": 0.591,
+            "f1_iou50": 0.7179,
+            "tp": 2500,
+            "fp": 235,
+            "fn": 1730,
+            "processing_seconds": 3.72,
+            "counting_line": [
+              [
+                0.55,
+                0.1
+              ],
+              [
+                0.55,
+                0.95
+              ]
+            ],
+            "annotation_sha256": "6de301580ebf482c7af4c922c6445edcd9a04469064f0d70ef0f87f44df3596b",
+            "reference_crossings": {
+              "in": 0,
+              "out": 5,
+              "total": 5
+            },
+            "predicted_crossings": {
+              "in": 0,
+              "out": 1,
+              "total": 1
+            },
+            "crossing_absolute_error": 4,
+            "reference_distinct_vehicles": 27,
+            "predicted_distinct_tracks": 51,
+            "distinct_count_absolute_error": 24
+          },
+          {
+            "sequence": "MVI_40742",
+            "split": "test",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 3541,
+            "predicted_vehicle_instances": 3216,
+            "count_mae": 1.7287,
+            "count_wape": 0.0918,
+            "precision_iou50": 0.9807,
+            "recall_iou50": 0.8907,
+            "f1_iou50": 0.9336,
+            "tp": 3154,
+            "fp": 62,
+            "fn": 387,
+            "processing_seconds": 3.73,
+            "counting_line": [
+              [
+                0.1,
+                0.65
+              ],
+              [
+                0.95,
+                0.65
+              ]
+            ],
+            "annotation_sha256": "0364d4428215e98a59264a540d2b8f7218a3b0c488bc271d093fa53d439a0610",
+            "reference_crossings": {
+              "in": 6,
+              "out": 0,
+              "total": 6
+            },
+            "predicted_crossings": {
+              "in": 3,
+              "out": 0,
+              "total": 3
+            },
+            "crossing_absolute_error": 3,
+            "reference_distinct_vehicles": 24,
+            "predicted_distinct_tracks": 36,
+            "distinct_count_absolute_error": 12
+          }
+        ]
+      },
+      "selected": {
+        "settings": {
+          "weights": "yolov8s.pt",
+          "imgsz": 960,
+          "conf": 0.35,
+          "agnostic_nms": true
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 9771,
+          "predicted_vehicle_instances": 8472,
+          "count_mae": 2.0332,
+          "count_wape": 0.1565,
+          "precision_iou50": 0.9109,
+          "recall_iou50": 0.7898,
+          "f1_iou50": 0.846,
+          "tp": 7717,
+          "fp": 755,
+          "fn": 2054,
+          "crossing_absolute_error": 6,
+          "reference_crossings": 32,
+          "distinct_count_absolute_error": 50,
+          "reference_distinct_vehicles": 86
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_39051",
+            "split": "test",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 399,
+            "predicted_vehicle_instances": 407,
+            "count_mae": 0.1596,
+            "count_wape": 0.0752,
+            "precision_iou50": 0.887,
+            "recall_iou50": 0.9048,
+            "f1_iou50": 0.8958,
+            "tp": 361,
+            "fp": 46,
+            "fn": 38,
+            "processing_seconds": 13.46,
+            "counting_line": [
+              [
+                0.5,
+                0.35
+              ],
+              [
+                0.5,
+                1
+              ]
+            ],
+            "annotation_sha256": "c379907766c26646c08eb9716e28df055a64d7ab881aa985019ae9c0f5ccc863",
+            "reference_crossings": {
+              "in": 9,
+              "out": 0,
+              "total": 9
+            },
+            "predicted_crossings": {
+              "in": 8,
+              "out": 0,
+              "total": 8
+            },
+            "crossing_absolute_error": 1,
+            "reference_distinct_vehicles": 12,
+            "predicted_distinct_tracks": 14,
+            "distinct_count_absolute_error": 2
+          },
+          {
+            "sequence": "MVI_39501",
+            "split": "test",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1601,
+            "predicted_vehicle_instances": 1298,
+            "count_mae": 1.8989,
+            "count_wape": 0.223,
+            "precision_iou50": 0.8151,
+            "recall_iou50": 0.6608,
+            "f1_iou50": 0.7299,
+            "tp": 1058,
+            "fp": 240,
+            "fn": 543,
+            "processing_seconds": 12.23,
+            "counting_line": [
+              [
+                0.1,
+                0.6
+              ],
+              [
+                0.9,
+                0.6
+              ]
+            ],
+            "annotation_sha256": "d2e519ea3e6990b7eef5ff7fbba50803c5914a0b23d6d113baa028c1a2f0e6e0",
+            "reference_crossings": {
+              "in": 12,
+              "out": 0,
+              "total": 12
+            },
+            "predicted_crossings": {
+              "in": 13,
+              "out": 0,
+              "total": 13
+            },
+            "crossing_absolute_error": 1,
+            "reference_distinct_vehicles": 23,
+            "predicted_distinct_tracks": 40,
+            "distinct_count_absolute_error": 17
+          },
+          {
+            "sequence": "MVI_40863",
+            "split": "test",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 4230,
+            "predicted_vehicle_instances": 3284,
+            "count_mae": 5.0319,
+            "count_wape": 0.2236,
+            "precision_iou50": 0.9147,
+            "recall_iou50": 0.7102,
+            "f1_iou50": 0.7996,
+            "tp": 3004,
+            "fp": 280,
+            "fn": 1226,
+            "processing_seconds": 12.28,
+            "counting_line": [
+              [
+                0.55,
+                0.1
+              ],
+              [
+                0.55,
+                0.95
+              ]
+            ],
+            "annotation_sha256": "6de301580ebf482c7af4c922c6445edcd9a04469064f0d70ef0f87f44df3596b",
+            "reference_crossings": {
+              "in": 0,
+              "out": 5,
+              "total": 5
+            },
+            "predicted_crossings": {
+              "in": 1,
+              "out": 5,
+              "total": 6
+            },
+            "crossing_absolute_error": 1,
+            "reference_distinct_vehicles": 27,
+            "predicted_distinct_tracks": 38,
+            "distinct_count_absolute_error": 11
+          },
+          {
+            "sequence": "MVI_40742",
+            "split": "test",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 3541,
+            "predicted_vehicle_instances": 3483,
+            "count_mae": 1.0426,
+            "count_wape": 0.0554,
+            "precision_iou50": 0.9457,
+            "recall_iou50": 0.9302,
+            "f1_iou50": 0.9379,
+            "tp": 3294,
+            "fp": 189,
+            "fn": 247,
+            "processing_seconds": 12.38,
+            "counting_line": [
+              [
+                0.1,
+                0.65
+              ],
+              [
+                0.95,
+                0.65
+              ]
+            ],
+            "annotation_sha256": "0364d4428215e98a59264a540d2b8f7218a3b0c488bc271d093fa53d439a0610",
+            "reference_crossings": {
+              "in": 6,
+              "out": 0,
+              "total": 6
+            },
+            "predicted_crossings": {
+              "in": 3,
+              "out": 0,
+              "total": 3
+            },
+            "crossing_absolute_error": 3,
+            "reference_distinct_vehicles": 24,
+            "predicted_distinct_tracks": 44,
+            "distinct_count_absolute_error": 20
+          }
+        ]
+      }
+    },
+    "acceptance": {
+      "passed": true,
+      "checks": {
+        "frame_count_mae_not_worse": true,
+        "detection_f1_not_worse": true,
+        "line_crossing_error_not_worse": true
+      },
+      "scope": "Frame-count and line-crossing estimates only; not distinct clip totals."
+    },
+    "distinct_count_validation": {
+      "passed": false,
+      "notice": "Tracker IDs can fragment and count a vehicle again. Do not present track totals as verified distinct vehicles."
+    }
+  },
+  "routing": {
+    "graph": {
+      "available": true,
+      "directed_edges": 1038087,
+      "nodes": 456292,
+      "geometry_points": 1113673,
+      "simplified": true,
+      "coverage": {
+        "scope": "bengaluru_wide",
+        "coverage": "Entire supported Bengaluru region with 2 km boundary buffer",
+        "bounds": [
+          12.7,
+          77.3,
+          13.25,
+          77.9
+        ],
+        "buffer_degrees": 0.02,
+        "source": "https://download.geofabrik.de/asia/india/southern-zone-latest.osm.pbf",
+        "source_sha256": "c4d5593993345dde1c34e47033a2ae217c2dfa0992bf7340e4707fbcc924b944",
+        "osm_timestamp": "2026-11-09T21:22:17Z",
+        "built_at": "2026-11-10T17:06:53.338146+00:00",
+        "attribution": "\u00a9 OpenStreetMap contributors, ODbL; extract by Geofabrik",
+        "ways": 258424,
+        "nodes": 1046500,
+        "restriction_relations": 438,
+        "notice": "Real mapped road geometry, not live traffic. Unmapped roads and access restrictions can limit routing.",
+        "mapped_city_boundary": {
+          "osm_id": 7902476,
+          "bbox": [
+            12.8334905,
+            77.4598797,
+            13.1426196,
+            77.7840639
+          ],
+          "contained": true
+        }
+      },
+      "turn_restrictions": 231,
+      "conservatively_blocked_complex_restrictions": 190
+    },
+    "load_seconds": 9.066,
+    "cases": [
+      {
+        "name": "Indiranagar\u2013Hebbal",
+        "passed": true,
+        "distance_m": 11919,
+        "seconds": 1.889,
+        "astar_seconds": 0.217,
+        "cost_matches_astar": true,
+        "geometry_points": 420,
+        "snap_distance_m": [
+          31,
+          15
+        ],
+        "expanded_states": 173691,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 0.227,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "Kengeri\u2013Whitefield",
+        "passed": true,
+        "distance_m": 34588,
+        "seconds": 5.937,
+        "astar_seconds": 1.156,
+        "cost_matches_astar": true,
+        "geometry_points": 1107,
+        "snap_distance_m": [
+          9,
+          64
+        ],
+        "expanded_states": 700686,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 0.875,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "Central Bengaluru\u2013Electronic City",
+        "passed": true,
+        "distance_m": 21077,
+        "seconds": 2.024,
+        "astar_seconds": 0.476,
+        "cost_matches_astar": true,
+        "geometry_points": 619,
+        "snap_distance_m": [
+          71,
+          69
+        ],
+        "expanded_states": 228799,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 0.313,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "Hoskote\u2013Yeshwanthpur",
+        "passed": true,
+        "distance_m": 35759,
+        "seconds": 6.05,
+        "astar_seconds": 0.57,
+        "cost_matches_astar": true,
+        "geometry_points": 904,
+        "snap_distance_m": [
+          77,
+          5
+        ],
+        "expanded_states": 794021,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 0.765,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "Bannerghatta\u2013Yelahanka",
+        "passed": true,
+        "distance_m": 38568,
+        "seconds": 8.226,
+        "astar_seconds": 0.919,
+        "cost_matches_astar": true,
+        "geometry_points": 1170,
+        "snap_distance_m": [
+          55,
+          34
+        ],
+        "expanded_states": 1045130,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 0.454,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "Nagarbhavi\u2013Sarjapur",
+        "passed": true,
+        "distance_m": 37847,
+        "seconds": 5.302,
+        "astar_seconds": 1.395,
+        "cost_matches_astar": true,
+        "geometry_points": 1142,
+        "snap_distance_m": [
+          25,
+          7
+        ],
+        "expanded_states": 572922,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 3.368,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "City centre\u2013airport",
+        "passed": true,
+        "distance_m": 37030,
+        "seconds": 2.616,
+        "astar_seconds": 0.886,
+        "cost_matches_astar": true,
+        "geometry_points": 832,
+        "snap_distance_m": [
+          50,
+          15
+        ],
+        "expanded_states": 215305,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 2.109,
+        "reopened_matches_original": true
+      },
+      {
+        "name": "Nelamangala\u2013Attibele",
+        "passed": true,
+        "distance_m": 61765,
+        "seconds": 8.071,
+        "astar_seconds": 1.385,
+        "cost_matches_astar": true,
+        "geometry_points": 1498,
+        "snap_distance_m": [
+          27,
+          15
+        ],
+        "expanded_states": 976381,
+        "closure_repair_matches_astar": true,
+        "closure_avoided": true,
+        "repair_seconds": 2.157,
+        "reopened_matches_original": true
+      }
+    ],
+    "source": "Real Geofabrik/OpenStreetMap extract; all routes computed locally.",
+    "checked_at": "2026-11-10T17:20:29.488170+00:00",
+    "peak_rss_gib": 2.318,
+    "passed": true
+  },
+  "original_archive": {
+    "restored_at": "2026-11-11T03:52:26.228193+00:00",
+    "block_archive": "bangalore_traffic_timely_dataset.zip",
+    "block_archive_sha256": "82b228ffa5bfd3c3f01dd8ac829c0d6d9b98301e2dd710ad0d7ba2b702314927",
+    "daily_archive_sha256": "09202e1aeaff512980a15009d18e328a5cd75d386a98df6ea150629776d68998",
+    "block_archive_bytes": 695179,
+    "valid_block_records": 33072,
+    "rejected_records": 0,
+    "roads": 16,
+    "areas": 8,
+    "date_range": [
+      "2023-01-01",
+      "2024-08-09"
+    ],
+    "labels": {
+      "High": 27280,
+      "Medium": 5244,
+      "Low": 548
+    },
+    "complete_six_block_days": 5512,
+    "matches_saved_project_facts": true,
+    "derived_daily_volume_shares_confirmed": true,
+    "volume_shares": {
+      "Midnight": 0.04,
+      "Morning": 0.08,
+      "Daytime": 0.26,
+      "Noon": 0.19,
+      "Evening": 0.28,
+      "Night": 0.15
+    },
+    "max_volume_rounding_error": 0.5,
+    "notice": "Original supplied project archive. Its six block volumes are rounded fixed shares of the public daily source; these are derived time blocks, not six independently measured CCTV/sensor intervals. Labels are unverified."
+  },
+  "model_upgrade": {
+    "version": "rf-20261111-041533",
+    "kind": "random_forest",
+    "metrics": {
+      "task": "Next-block severity on the restored project archive. Classifier and feature complexity selected using validation only; simple candidates retain the original input definition.",
+      "classes": [
+        "Low",
+        "Medium",
+        "High"
+      ],
+      "sequence_length": 6,
+      "max_horizon_blocks": 3,
+      "time_granularity": "block",
+      "split": {
+        "method": "chronological target dates: 70% training / 15% validation / 15% test",
+        "train_before": "2024-02-16",
+        "test_from": "2024-05-14"
+      },
+      "test": {
+        "count": 3246,
+        "accuracy": 0.9341,
+        "macro_f1": 0.6321,
+        "per_class": {
+          "Low": {
+            "precision": 0.1351,
+            "recall": 0.1087,
+            "f1": 0.1205,
+            "support": 46
+          },
+          "Medium": {
+            "precision": 0.7208,
+            "recall": 0.9097,
+            "f1": 0.8043,
+            "support": 454
+          },
+          "High": {
+            "precision": 0.9917,
+            "recall": 0.9519,
+            "f1": 0.9714,
+            "support": 2746
+          }
+        },
+        "confusion_matrix": [
+          [
+            5,
+            39,
+            2
+          ],
+          [
+            21,
+            413,
+            20
+          ],
+          [
+            11,
+            121,
+            2614
+          ]
+        ]
+      },
+      "validation": {
+        "count": 3180,
+        "accuracy": 0.9352,
+        "macro_f1": 0.6622,
+        "per_class": {
+          "Low": {
+            "precision": 0.1961,
+            "recall": 0.2381,
+            "f1": 0.2151,
+            "support": 42
+          },
+          "Medium": {
+            "precision": 0.7287,
+            "recall": 0.8848,
+            "f1": 0.7992,
+            "support": 434
+          },
+          "High": {
+            "precision": 0.9915,
+            "recall": 0.9541,
+            "f1": 0.9725,
+            "support": 2704
+          }
+        },
+        "confusion_matrix": [
+          [
+            10,
+            32,
+            0
+          ],
+          [
+            28,
+            384,
+            22
+          ],
+          [
+            13,
+            111,
+            2580
+          ]
+        ]
+      },
+      "within_date_test": {
+        "count": 2705,
+        "accuracy": 0.9989,
+        "macro_f1": 0.996,
+        "per_class": {
+          "Low": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "support": 2
+          },
+          "Medium": {
+            "precision": 0.9847,
+            "recall": 0.9923,
+            "f1": 0.9885,
+            "support": 130
+          },
+          "High": {
+            "precision": 0.9996,
+            "recall": 0.9992,
+            "f1": 0.9994,
+            "support": 2573
+          }
+        },
+        "confusion_matrix": [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            0,
+            129,
+            1
+          ],
+          [
+            0,
+            2,
+            2571
+          ]
+        ]
+      },
+      "next_date_test": {
+        "count": 541,
+        "accuracy": 0.61,
+        "macro_f1": 0.3934,
+        "per_class": {
+          "Low": {
+            "precision": 0.0857,
+            "recall": 0.0682,
+            "f1": 0.0759,
+            "support": 44
+          },
+          "Medium": {
+            "precision": 0.6425,
+            "recall": 0.8765,
+            "f1": 0.7415,
+            "support": 324
+          },
+          "High": {
+            "precision": 0.6719,
+            "recall": 0.2486,
+            "f1": 0.3629,
+            "support": 173
+          }
+        },
+        "confusion_matrix": [
+          [
+            3,
+            39,
+            2
+          ],
+          [
+            21,
+            284,
+            19
+          ],
+          [
+            11,
+            119,
+            43
+          ]
+        ]
+      },
+      "baselines_test": {
+        "majority": {
+          "count": 3246,
+          "accuracy": 0.846,
+          "macro_f1": 0.3055,
+          "per_class": {
+            "Low": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 46
+            },
+            "Medium": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 454
+            },
+            "High": {
+              "precision": 0.846,
+              "recall": 1.0,
+              "f1": 0.9166,
+              "support": 2746
+            }
+          },
+          "confusion_matrix": [
+            [
+              0,
+              0,
+              46
+            ],
+            [
+              0,
+              0,
+              454
+            ],
+            [
+              0,
+              0,
+              2746
+            ]
+          ]
+        },
+        "persistence": {
+          "count": 3246,
+          "accuracy": 0.7575,
+          "macro_f1": 0.3642,
+          "per_class": {
+            "Low": {
+              "precision": 0.0435,
+              "recall": 0.0435,
+              "f1": 0.0435,
+              "support": 46
+            },
+            "Medium": {
+              "precision": 0.1842,
+              "recall": 0.185,
+              "f1": 0.1846,
+              "support": 454
+            },
+            "High": {
+              "precision": 0.8648,
+              "recall": 0.8642,
+              "f1": 0.8645,
+              "support": 2746
+            }
+          },
+          "confusion_matrix": [
+            [
+              2,
+              1,
+              43
+            ],
+            [
+              42,
+              84,
+              328
+            ],
+            [
+              2,
+              371,
+              2373
+            ]
+          ]
+        },
+        "historical_profile": {
+          "count": 3246,
+          "accuracy": 0.8894,
+          "macro_f1": 0.6039,
+          "per_class": {
+            "Low": {
+              "precision": 0.3333,
+              "recall": 0.1522,
+              "f1": 0.209,
+              "support": 46
+            },
+            "Medium": {
+              "precision": 0.579,
+              "recall": 0.7665,
+              "f1": 0.6597,
+              "support": 454
+            },
+            "High": {
+              "precision": 0.9649,
+              "recall": 0.9221,
+              "f1": 0.943,
+              "support": 2746
+            }
+          },
+          "confusion_matrix": [
+            [
+              7,
+              39,
+              0
+            ],
+            [
+              14,
+              348,
+              92
+            ],
+            [
+              0,
+              214,
+              2532
+            ]
+          ]
+        }
+      },
+      "baselines_validation": {
+        "majority": {
+          "count": 3180,
+          "accuracy": 0.8503,
+          "macro_f1": 0.3064,
+          "per_class": {
+            "Low": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 42
+            },
+            "Medium": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 434
+            },
+            "High": {
+              "precision": 0.8503,
+              "recall": 1.0,
+              "f1": 0.9191,
+              "support": 2704
+            }
+          },
+          "confusion_matrix": [
+            [
+              0,
+              0,
+              42
+            ],
+            [
+              0,
+              0,
+              434
+            ],
+            [
+              0,
+              0,
+              2704
+            ]
+          ]
+        },
+        "persistence": {
+          "count": 3180,
+          "accuracy": 0.7597,
+          "macro_f1": 0.3664,
+          "per_class": {
+            "Low": {
+              "precision": 0.0714,
+              "recall": 0.0714,
+              "f1": 0.0714,
+              "support": 42
+            },
+            "Medium": {
+              "precision": 0.162,
+              "recall": 0.1613,
+              "f1": 0.1617,
+              "support": 434
+            },
+            "High": {
+              "precision": 0.8659,
+              "recall": 0.8665,
+              "f1": 0.8662,
+              "support": 2704
+            }
+          },
+          "confusion_matrix": [
+            [
+              3,
+              2,
+              37
+            ],
+            [
+              38,
+              70,
+              326
+            ],
+            [
+              1,
+              360,
+              2343
+            ]
+          ]
+        },
+        "historical_profile": {
+          "count": 3180,
+          "accuracy": 0.8871,
+          "macro_f1": 0.6312,
+          "per_class": {
+            "Low": {
+              "precision": 0.2955,
+              "recall": 0.3095,
+              "f1": 0.3023,
+              "support": 42
+            },
+            "Medium": {
+              "precision": 0.5651,
+              "recall": 0.7604,
+              "f1": 0.6483,
+              "support": 434
+            },
+            "High": {
+              "precision": 0.971,
+              "recall": 0.9164,
+              "f1": 0.9429,
+              "support": 2704
+            }
+          },
+          "confusion_matrix": [
+            [
+              13,
+              29,
+              0
+            ],
+            [
+              30,
+              330,
+              74
+            ],
+            [
+              1,
+              225,
+              2478
+            ]
+          ]
+        }
+      },
+      "horizons_test": {
+        "1": {
+          "count": 3246,
+          "accuracy": 0.9341,
+          "macro_f1": 0.6321,
+          "per_class": {
+            "Low": {
+              "precision": 0.1351,
+              "recall": 0.1087,
+              "f1": 0.1205,
+              "support": 46
+            },
+            "Medium": {
+              "precision": 0.7208,
+              "recall": 0.9097,
+              "f1": 0.8043,
+              "support": 454
+            },
+            "High": {
+              "precision": 0.9917,
+              "recall": 0.9519,
+              "f1": 0.9714,
+              "support": 2746
+            }
+          },
+          "confusion_matrix": [
+            [
+              5,
+              39,
+              2
+            ],
+            [
+              21,
+              413,
+              20
+            ],
+            [
+              11,
+              121,
+              2614
+            ]
+          ]
+        },
+        "2": {
+          "count": 3087,
+          "accuracy": 0.9096,
+          "macro_f1": 0.5914,
+          "per_class": {
+            "Low": {
+              "precision": 0.3077,
+              "recall": 0.1429,
+              "f1": 0.1951,
+              "support": 28
+            },
+            "Medium": {
+              "precision": 0.6156,
+              "recall": 0.6361,
+              "f1": 0.6257,
+              "support": 360
+            },
+            "High": {
+              "precision": 0.953,
+              "recall": 0.9541,
+              "f1": 0.9535,
+              "support": 2699
+            }
+          },
+          "confusion_matrix": [
+            [
+              4,
+              22,
+              2
+            ],
+            [
+              6,
+              229,
+              125
+            ],
+            [
+              3,
+              121,
+              2575
+            ]
+          ]
+        },
+        "3": {
+          "count": 2928,
+          "accuracy": 0.9214,
+          "macro_f1": 0.5968,
+          "per_class": {
+            "Low": {
+              "precision": 0.1667,
+              "recall": 0.1538,
+              "f1": 0.16,
+              "support": 26
+            },
+            "Medium": {
+              "precision": 0.6408,
+              "recall": 0.6991,
+              "f1": 0.6687,
+              "support": 319
+            },
+            "High": {
+              "precision": 0.9667,
+              "recall": 0.9566,
+              "f1": 0.9617,
+              "support": 2583
+            }
+          },
+          "confusion_matrix": [
+            [
+              4,
+              21,
+              1
+            ],
+            [
+              12,
+              223,
+              84
+            ],
+            [
+              8,
+              104,
+              2471
+            ]
+          ]
+        }
+      },
+      "lstm_regression_test": {},
+      "breakdowns_test": {
+        "time_block": {
+          "Daytime": {
+            "count": 541,
+            "accuracy": 0.9963,
+            "macro_f1": 0.3327
+          },
+          "Evening": {
+            "count": 541,
+            "accuracy": 1.0,
+            "macro_f1": 0.3333
+          },
+          "Midnight": {
+            "count": 541,
+            "accuracy": 0.61,
+            "macro_f1": 0.3934
+          },
+          "Morning": {
+            "count": 541,
+            "accuracy": 1.0,
+            "macro_f1": 1.0
+          },
+          "Night": {
+            "count": 541,
+            "accuracy": 1.0,
+            "macro_f1": 0.6667
+          },
+          "Noon": {
+            "count": 541,
+            "accuracy": 0.9982,
+            "macro_f1": 0.5997
+          }
+        },
+        "day_type": {
+          "weekday": {
+            "count": 2340,
+            "accuracy": 0.935,
+            "macro_f1": 0.6361
+          },
+          "weekend": {
+            "count": 906,
+            "accuracy": 0.9316,
+            "macro_f1": 0.6208
+          }
+        },
+        "weather": {
+          "dry": {
+            "count": 2964,
+            "accuracy": 0.9339,
+            "macro_f1": 0.6346
+          },
+          "wet": {
+            "count": 282,
+            "accuracy": 0.9362,
+            "macro_f1": 0.5977
+          }
+        },
+        "area": {
+          "Electronic City": {
+            "count": 102,
+            "accuracy": 0.902,
+            "macro_f1": 0.7429
+          },
+          "Hebbal": {
+            "count": 276,
+            "accuracy": 0.9239,
+            "macro_f1": 0.5875
+          },
+          "Indiranagar": {
+            "count": 882,
+            "accuracy": 0.9218,
+            "macro_f1": 0.5988
+          },
+          "Jayanagar": {
+            "count": 432,
+            "accuracy": 0.9583,
+            "macro_f1": 0.6823
+          },
+          "Koramangala": {
+            "count": 486,
+            "accuracy": 0.9218,
+            "macro_f1": 0.5088
+          },
+          "M.G. Road": {
+            "count": 684,
+            "accuracy": 0.9313,
+            "macro_f1": 0.569
+          },
+          "Whitefield": {
+            "count": 258,
+            "accuracy": 0.9767,
+            "macro_f1": 0.6491
+          },
+          "Yeshwanthpur": {
+            "count": 126,
+            "accuracy": 0.9603,
+            "macro_f1": 0.641
+          }
+        }
+      },
+      "transfer_validation": {
+        "enabled": true,
+        "count": 4980,
+        "roads_evaluated": 16,
+        "macro_f1": 0.5253,
+        "accuracy": 0.8787,
+        "majority_baseline_macro_f1": 0.3013,
+        "required_gain": 0.02,
+        "per_road": {
+          "electronic-city--hosur-road-29c7e5": {
+            "count": 192,
+            "accuracy": 0.7656
+          },
+          "electronic-city--silk-board-junction-f3d434": {
+            "count": 144,
+            "accuracy": 0.8194
+          },
+          "hebbal--ballari-road-f531d4": {
+            "count": 228,
+            "accuracy": 0.807
+          },
+          "hebbal--hebbal-flyover-2a4396": {
+            "count": 294,
+            "accuracy": 0.8878
+          },
+          "indiranagar--100-feet-road-303336": {
+            "count": 486,
+            "accuracy": 0.9115
+          },
+          "indiranagar--cmh-road-2c76cc": {
+            "count": 480,
+            "accuracy": 0.9125
+          },
+          "jayanagar--jayanagar-4th-block-c06df9": {
+            "count": 312,
+            "accuracy": 0.8878
+          },
+          "jayanagar--south-end-circle-c9183b": {
+            "count": 336,
+            "accuracy": 0.9077
+          },
+          "koramangala--sarjapur-road-604b94": {
+            "count": 366,
+            "accuracy": 0.877
+          },
+          "koramangala--sony-world-junction-012f38": {
+            "count": 354,
+            "accuracy": 0.8729
+          },
+          "mg-road--anil-kumble-circle-395acc": {
+            "count": 438,
+            "accuracy": 0.9201
+          },
+          "mg-road--trinity-circle-52cac6": {
+            "count": 408,
+            "accuracy": 0.8799
+          },
+          "whitefield--itpl-main-road-a385c8": {
+            "count": 258,
+            "accuracy": 0.8333
+          },
+          "whitefield--marathahalli-bridge-6f727f": {
+            "count": 282,
+            "accuracy": 0.9078
+          },
+          "yeshwanthpur--tumkur-road-9532b6": {
+            "count": 234,
+            "accuracy": 0.8504
+          },
+          "yeshwanthpur--yeshwanthpur-circle-90d1a7": {
+            "count": 168,
+            "accuracy": 0.8393
+          }
+        },
+        "reason": "Transfer beat the majority baseline on held-out roads."
+      },
+      "active_model_comparison": null,
+      "experiment": {
+        "seed": 42,
+        "libraries": {
+          "numpy": "2.3.5",
+          "pandas": "2.2.3",
+          "scikit-learn": "1.9.1",
+          "tensorflow": "2.21.0"
+        },
+        "selection_period": "validation only",
+        "selected_family": "random_forest",
+        "search": {
+          "selected_settings": {
+            "min_samples_leaf": 1,
+            "max_features": 1.0
+          },
+          "trials": [
+            {
+              "settings": {
+                "min_samples_leaf": 1,
+                "max_features": 1.0
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9333,
+                "macro_f1": 0.6541,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.2105,
+                    "recall": 0.1905,
+                    "f1": 0.2,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7186,
+                    "recall": 0.8825,
+                    "f1": 0.7921,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9877,
+                    "recall": 0.953,
+                    "f1": 0.9701,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    8,
+                    33,
+                    1
+                  ],
+                  [
+                    20,
+                    383,
+                    31
+                  ],
+                  [
+                    10,
+                    117,
+                    2577
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 6.0,
+                "Medium": 2.0
+              }
+            },
+            {
+              "settings": {
+                "min_samples_leaf": 2,
+                "max_features": 1.0
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.934,
+                "macro_f1": 0.653,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.1905,
+                    "recall": 0.1905,
+                    "f1": 0.1905,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.714,
+                    "recall": 0.9032,
+                    "f1": 0.7976,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9927,
+                    "recall": 0.9504,
+                    "f1": 0.9711,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    8,
+                    34,
+                    0
+                  ],
+                  [
+                    23,
+                    392,
+                    19
+                  ],
+                  [
+                    11,
+                    123,
+                    2570
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 4.0,
+                "Medium": 1.5
+              }
+            },
+            {
+              "settings": {
+                "min_samples_leaf": 4,
+                "max_features": 0.75
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9349,
+                "macro_f1": 0.6538,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.1765,
+                    "recall": 0.2143,
+                    "f1": 0.1935,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7311,
+                    "recall": 0.871,
+                    "f1": 0.795,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.99,
+                    "recall": 0.9564,
+                    "f1": 0.9729,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    9,
+                    33,
+                    0
+                  ],
+                  [
+                    30,
+                    378,
+                    26
+                  ],
+                  [
+                    12,
+                    106,
+                    2586
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 1.5,
+                "Medium": 0.75
+              }
+            },
+            {
+              "settings": {
+                "min_samples_leaf": 2,
+                "max_features": "sqrt"
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.934,
+                "macro_f1": 0.6374,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.1852,
+                    "recall": 0.119,
+                    "f1": 0.1449,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7037,
+                    "recall": 0.9194,
+                    "f1": 0.7972,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9923,
+                    "recall": 0.949,
+                    "f1": 0.9701,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    5,
+                    36,
+                    1
+                  ],
+                  [
+                    16,
+                    399,
+                    19
+                  ],
+                  [
+                    6,
+                    132,
+                    2566
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 2.0,
+                "Medium": 1.0
+              }
+            }
+          ],
+          "selection_period": "validation only",
+          "family_trials": [
+            {
+              "family": "random_forest",
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9333,
+                "macro_f1": 0.6541,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.2105,
+                    "recall": 0.1905,
+                    "f1": 0.2,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7186,
+                    "recall": 0.8825,
+                    "f1": 0.7921,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9877,
+                    "recall": 0.953,
+                    "f1": 0.9701,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    8,
+                    33,
+                    1
+                  ],
+                  [
+                    20,
+                    383,
+                    31
+                  ],
+                  [
+                    10,
+                    117,
+                    2577
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 6.0,
+                "Medium": 2.0
+              }
+            },
+            {
+              "family": "hist_gradient_balanced_15",
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9302,
+                "macro_f1": 0.663,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.2037,
+                    "recall": 0.2619,
+                    "f1": 0.2292,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.6998,
+                    "recall": 0.9078,
+                    "f1": 0.7904,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9961,
+                    "recall": 0.9442,
+                    "f1": 0.9694,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    11,
+                    30,
+                    1
+                  ],
+                  [
+                    31,
+                    394,
+                    9
+                  ],
+                  [
+                    12,
+                    139,
+                    2553
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 0.5,
+                "Medium": 0.5
+              }
+            },
+            {
+              "family": "hist_gradient_balanced_31",
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9286,
+                "macro_f1": 0.6357,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.125,
+                    "recall": 0.1905,
+                    "f1": 0.1509,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7079,
+                    "recall": 0.8825,
+                    "f1": 0.7856,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.995,
+                    "recall": 0.9475,
+                    "f1": 0.9706,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    8,
+                    32,
+                    2
+                  ],
+                  [
+                    40,
+                    383,
+                    11
+                  ],
+                  [
+                    16,
+                    126,
+                    2562
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 4.0,
+                "Medium": 1.0
+              }
+            },
+            {
+              "family": "hist_gradient_unweighted",
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.934,
+                "macro_f1": 0.6372,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.1458,
+                    "recall": 0.1667,
+                    "f1": 0.1556,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7398,
+                    "recall": 0.8318,
+                    "f1": 0.7831,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9841,
+                    "recall": 0.9623,
+                    "f1": 0.9731,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    7,
+                    33,
+                    2
+                  ],
+                  [
+                    33,
+                    361,
+                    40
+                  ],
+                  [
+                    8,
+                    94,
+                    2602
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 4.0,
+                "Medium": 1.0
+              }
+            },
+            {
+              "family": "logistic_regularized",
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.884,
+                "macro_f1": 0.6065,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.4167,
+                    "recall": 0.119,
+                    "f1": 0.1852,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.5412,
+                    "recall": 0.9839,
+                    "f1": 0.6983,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 1.0,
+                    "recall": 0.8798,
+                    "f1": 0.9361,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    5,
+                    37,
+                    0
+                  ],
+                  [
+                    7,
+                    427,
+                    0
+                  ],
+                  [
+                    0,
+                    325,
+                    2379
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 0.5,
+                "Medium": 3.0
+              }
+            }
+          ],
+          "simplicity_selection": {
+            "method": "One paired date-clustered validation standard error; 400 resamples, seed 42.",
+            "validation_difference": 0.0008,
+            "standard_error": 0.012405671922553178,
+            "simple_selected": true
+          }
+        },
+        "previous_feature_search": {
+          "selected_settings": {
+            "min_samples_leaf": 4,
+            "max_features": 0.5
+          },
+          "trials": [
+            {
+              "settings": {
+                "min_samples_leaf": 2,
+                "max_features": "sqrt"
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9283,
+                "macro_f1": 0.6504,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.1622,
+                    "recall": 0.2857,
+                    "f1": 0.2069,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7197,
+                    "recall": 0.8341,
+                    "f1": 0.7727,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9904,
+                    "recall": 0.9534,
+                    "f1": 0.9715,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    12,
+                    30,
+                    0
+                  ],
+                  [
+                    47,
+                    362,
+                    25
+                  ],
+                  [
+                    15,
+                    111,
+                    2578
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 3.0,
+                "Medium": 1.0
+              }
+            },
+            {
+              "settings": {
+                "min_samples_leaf": 4,
+                "max_features": 0.5
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9352,
+                "macro_f1": 0.6622,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.1961,
+                    "recall": 0.2381,
+                    "f1": 0.2151,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7287,
+                    "recall": 0.8848,
+                    "f1": 0.7992,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9915,
+                    "recall": 0.9541,
+                    "f1": 0.9725,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    10,
+                    32,
+                    0
+                  ],
+                  [
+                    28,
+                    384,
+                    22
+                  ],
+                  [
+                    13,
+                    111,
+                    2580
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 1.5,
+                "Medium": 0.75
+              }
+            },
+            {
+              "settings": {
+                "min_samples_leaf": 1,
+                "max_features": 0.75
+              },
+              "validation": {
+                "count": 3180,
+                "accuracy": 0.9327,
+                "macro_f1": 0.6525,
+                "per_class": {
+                  "Low": {
+                    "precision": 0.2051,
+                    "recall": 0.1905,
+                    "f1": 0.1975,
+                    "support": 42
+                  },
+                  "Medium": {
+                    "precision": 0.7167,
+                    "recall": 0.8802,
+                    "f1": 0.7901,
+                    "support": 434
+                  },
+                  "High": {
+                    "precision": 0.9877,
+                    "recall": 0.9527,
+                    "f1": 0.9699,
+                    "support": 2704
+                  }
+                },
+                "confusion_matrix": [
+                  [
+                    8,
+                    33,
+                    1
+                  ],
+                  [
+                    21,
+                    382,
+                    31
+                  ],
+                  [
+                    10,
+                    118,
+                    2576
+                  ]
+                ]
+              },
+              "decision_weights": {
+                "High": 1.0,
+                "Low": 6.0,
+                "Medium": 2.0
+              }
+            }
+          ],
+          "selection_period": "validation only"
+        },
+        "cycle_scales": {
+          "traffic_volume": {
+            "Midnight": 0.24,
+            "Morning": 0.48,
+            "Daytime": 1.5599999999999998,
+            "Noon": 1.1400000000000001,
+            "Evening": 1.68,
+            "Night": 0.9
+          },
+          "average_speed": {
+            "Midnight": 1.1009174311926604,
+            "Morning": 0.8807339449541284,
+            "Daytime": 0.9908256880733944,
+            "Noon": 1.1009174311926604,
+            "Evening": 0.8256880733944953,
+            "Night": 1.1009174311926604
+          },
+          "travel_time_index": {
+            "Midnight": 0.8963414634146342,
+            "Morning": 1.1202263083451203,
+            "Daytime": 0.9958847736625513,
+            "Noon": 0.8963414634146342,
+            "Evening": 1.1950207468879668,
+            "Night": 0.8963414634146342
+          },
+          "_roads": [
+            "electronic-city--hosur-road-29c7e5",
+            "electronic-city--silk-board-junction-f3d434",
+            "hebbal--ballari-road-f531d4",
+            "hebbal--hebbal-flyover-2a4396",
+            "indiranagar--100-feet-road-303336",
+            "indiranagar--cmh-road-2c76cc",
+            "jayanagar--jayanagar-4th-block-c06df9",
+            "jayanagar--south-end-circle-c9183b",
+            "koramangala--sarjapur-road-604b94",
+            "koramangala--sony-world-junction-012f38",
+            "mg-road--anil-kumble-circle-395acc",
+            "mg-road--trinity-circle-52cac6",
+            "whitefield--itpl-main-road-a385c8",
+            "whitefield--marathahalli-bridge-6f727f",
+            "yeshwanthpur--tumkur-road-9532b6",
+            "yeshwanthpur--yeshwanthpur-circle-90d1a7"
+          ]
+        },
+        "preprocessing": "Cycle scales fitted on complete training road-days. Training profiles see earlier labels only. Cross-date projections are absent."
+      },
+      "caveat": "Historical re-evaluation: this source/test era was already examined in the project and earlier experiments. The source derives six blocks from daily values. Scores do not validate six independently measured traffic intervals or current Bengaluru forecasts.",
+      "training_seconds": 36.7,
+      "existing_feature_rf_reference": {
+        "test": {
+          "count": 3246,
+          "accuracy": 0.9341,
+          "macro_f1": 0.6321,
+          "per_class": {
+            "Low": {
+              "precision": 0.1351,
+              "recall": 0.1087,
+              "f1": 0.1205,
+              "support": 46
+            },
+            "Medium": {
+              "precision": 0.7208,
+              "recall": 0.9097,
+              "f1": 0.8043,
+              "support": 454
+            },
+            "High": {
+              "precision": 0.9917,
+              "recall": 0.9519,
+              "f1": 0.9714,
+              "support": 2746
+            }
+          },
+          "confusion_matrix": [
+            [
+              5,
+              39,
+              2
+            ],
+            [
+              21,
+              413,
+              20
+            ],
+            [
+              11,
+              121,
+              2614
+            ]
+          ]
+        },
+        "validation": {
+          "count": 3180,
+          "accuracy": 0.9352,
+          "macro_f1": 0.6622,
+          "per_class": {
+            "Low": {
+              "precision": 0.1961,
+              "recall": 0.2381,
+              "f1": 0.2151,
+              "support": 42
+            },
+            "Medium": {
+              "precision": 0.7287,
+              "recall": 0.8848,
+              "f1": 0.7992,
+              "support": 434
+            },
+            "High": {
+              "precision": 0.9915,
+              "recall": 0.9541,
+              "f1": 0.9725,
+              "support": 2704
+            }
+          },
+          "confusion_matrix": [
+            [
+              10,
+              32,
+              0
+            ],
+            [
+              28,
+              384,
+              22
+            ],
+            [
+              13,
+              111,
+              2580
+            ]
+          ]
+        }
+      }
+    },
+    "acceptance": {
+      "passed": true,
+      "rules": {
+        "min_macro_f1_gain_over_best_baseline": 0.02,
+        "lstm_must_beat_rf_without_lstm": true,
+        "accuracy_at_least_majority_baseline": true,
+        "every_class_recalled_when_support_at_least": 5,
+        "max_macro_f1_drop_vs_active_model": 0.01
+      },
+      "checks": [
+        {
+          "check": "macro-F1 beats the best baseline (historical_profile) by at least 0.02",
+          "passed": true,
+          "value": 0.6321,
+          "threshold": 0.6239
+        },
+        {
+          "check": "accuracy is at least the majority-class baseline",
+          "passed": true,
+          "value": 0.9341,
+          "threshold": 0.846
+        },
+        {
+          "check": "every class with at least 5 test records is predicted correctly at least once",
+          "passed": true,
+          "value": "all classes recalled"
+        }
+      ]
+    },
+    "data": {
+      "block_records": 33072,
+      "roads": 16,
+      "date_range": [
+        "2023-01-01",
+        "2024-08-09"
+      ],
+      "sources": {
+        "historical_dataset": 33072
+      },
+      "verified_records": 0,
+      "sequences": {
+        "train": 15228,
+        "validation": 3180,
+        "test": 3246
+      },
+      "rf_training_rows": 15228,
+      "time_granularity": "block",
+      "sha256": "9544e7f814eb3df767edb99fa29575a29ce761cd2fbbae25fdf60e5ed8a11ab2"
+    },
+    "status": "active"
+  },
+  "tracking_upgrade": {
+    "evaluated_at": "2026-11-11T03:58:41.771696+00:00",
+    "source": "https://sites.google.com/view/daweidu/projects/ua-detrac",
+    "scope": "Four newly acquired official test scenes; previous test scenes excluded. Chinese road footage, not Bengaluru site validation.",
+    "metric_scope": "Common every-second-source-frame metric frames. Visible detections use >=0.35 confidence independently of track confirmation. Identity metrics use confirmed association trajectories.",
+    "results": {
+      "previous": {
+        "policy": {
+          "name": "previous_sampled",
+          "step": 2,
+          "confidence": 0.35,
+          "new_track": 0.25,
+          "buffer": 30,
+          "min_hits": 1
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 8593,
+          "predicted_vehicle_instances": 8645,
+          "count_mae": 2.3484,
+          "count_wape": 0.2055,
+          "precision_iou50": 0.8175,
+          "recall_iou50": 0.8224,
+          "f1_iou50": 0.8199,
+          "tp": 7067,
+          "fp": 1578,
+          "fn": 1526,
+          "reference_distinct_vehicles": 105,
+          "predicted_distinct_tracks": 175,
+          "distinct_count_absolute_error": 70,
+          "reference_crossings": 26,
+          "predicted_crossings": 27,
+          "crossing_absolute_error": 1,
+          "idtp": 6418,
+          "idfp": 1937,
+          "idfn": 2175,
+          "identity_f1": 0.7574
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_39211",
+            "split": "test",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 709,
+            "predicted_vehicle_instances": 848,
+            "count_mae": 0.8138,
+            "count_wape": 0.2158,
+            "precision_iou50": 0.8184,
+            "recall_iou50": 0.9788,
+            "f1_iou50": 0.8915,
+            "tp": 694,
+            "fp": 154,
+            "fn": 15,
+            "reference_distinct_vehicles": 9,
+            "predicted_distinct_tracks": 12,
+            "distinct_count_absolute_error": 3,
+            "reference_crossings": 7,
+            "predicted_crossings": 7,
+            "crossing_absolute_error": 0,
+            "idtp": 693,
+            "idfp": 146,
+            "idfn": 16,
+            "identity_f1": 0.8953,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_40701",
+            "split": "test",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1840,
+            "predicted_vehicle_instances": 2351,
+            "count_mae": 2.9628,
+            "count_wape": 0.3027,
+            "precision_iou50": 0.7031,
+            "recall_iou50": 0.8984,
+            "f1_iou50": 0.7888,
+            "tp": 1653,
+            "fp": 698,
+            "fn": 187,
+            "reference_distinct_vehicles": 29,
+            "predicted_distinct_tracks": 52,
+            "distinct_count_absolute_error": 23,
+            "reference_crossings": 8,
+            "predicted_crossings": 8,
+            "crossing_absolute_error": 0,
+            "idtp": 1464,
+            "idfp": 802,
+            "idfn": 376,
+            "identity_f1": 0.7131,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_40864",
+            "split": "test",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 4798,
+            "predicted_vehicle_instances": 4016,
+            "count_mae": 4.4574,
+            "count_wape": 0.1747,
+            "precision_iou50": 0.8842,
+            "recall_iou50": 0.7401,
+            "f1_iou50": 0.8058,
+            "tp": 3551,
+            "fp": 465,
+            "fn": 1247,
+            "reference_distinct_vehicles": 42,
+            "predicted_distinct_tracks": 75,
+            "distinct_count_absolute_error": 33,
+            "reference_crossings": 4,
+            "predicted_crossings": 5,
+            "crossing_absolute_error": 1,
+            "idtp": 3141,
+            "idfp": 752,
+            "idfn": 1657,
+            "identity_f1": 0.7228,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_40743",
+            "split": "test",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 1246,
+            "predicted_vehicle_instances": 1430,
+            "count_mae": 1.1596,
+            "count_wape": 0.175,
+            "precision_iou50": 0.8175,
+            "recall_iou50": 0.9382,
+            "f1_iou50": 0.8737,
+            "tp": 1169,
+            "fp": 261,
+            "fn": 77,
+            "reference_distinct_vehicles": 25,
+            "predicted_distinct_tracks": 36,
+            "distinct_count_absolute_error": 11,
+            "reference_crossings": 7,
+            "predicted_crossings": 7,
+            "crossing_absolute_error": 0,
+            "idtp": 1120,
+            "idfp": 237,
+            "idfn": 126,
+            "identity_f1": 0.8605,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          }
+        ]
+      },
+      "selected": {
+        "policy": {
+          "name": "native_strict",
+          "step": 1,
+          "confidence": 0.1,
+          "new_track": 0.55,
+          "buffer": 90,
+          "min_hits": 5
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 8593,
+          "predicted_vehicle_instances": 8645,
+          "count_mae": 2.3484,
+          "count_wape": 0.2055,
+          "precision_iou50": 0.8175,
+          "recall_iou50": 0.8224,
+          "f1_iou50": 0.8199,
+          "tp": 7067,
+          "fp": 1578,
+          "fn": 1526,
+          "reference_distinct_vehicles": 105,
+          "predicted_distinct_tracks": 153,
+          "distinct_count_absolute_error": 48,
+          "reference_crossings": 26,
+          "predicted_crossings": 28,
+          "crossing_absolute_error": 2,
+          "idtp": 6559,
+          "idfp": 2066,
+          "idfn": 2034,
+          "identity_f1": 0.7619
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_39211",
+            "split": "test",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 709,
+            "predicted_vehicle_instances": 848,
+            "count_mae": 0.8138,
+            "count_wape": 0.2158,
+            "precision_iou50": 0.8184,
+            "recall_iou50": 0.9788,
+            "f1_iou50": 0.8915,
+            "tp": 694,
+            "fp": 154,
+            "fn": 15,
+            "reference_distinct_vehicles": 9,
+            "predicted_distinct_tracks": 12,
+            "distinct_count_absolute_error": 3,
+            "reference_crossings": 7,
+            "predicted_crossings": 8,
+            "crossing_absolute_error": 1,
+            "idtp": 696,
+            "idfp": 303,
+            "idfn": 13,
+            "identity_f1": 0.815,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          },
+          {
+            "sequence": "MVI_40701",
+            "split": "test",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1840,
+            "predicted_vehicle_instances": 2351,
+            "count_mae": 2.9628,
+            "count_wape": 0.3027,
+            "precision_iou50": 0.7031,
+            "recall_iou50": 0.8984,
+            "f1_iou50": 0.7888,
+            "tp": 1653,
+            "fp": 698,
+            "fn": 187,
+            "reference_distinct_vehicles": 29,
+            "predicted_distinct_tracks": 47,
+            "distinct_count_absolute_error": 18,
+            "reference_crossings": 8,
+            "predicted_crossings": 8,
+            "crossing_absolute_error": 0,
+            "idtp": 1556,
+            "idfp": 788,
+            "idfn": 284,
+            "identity_f1": 0.7438,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          },
+          {
+            "sequence": "MVI_40864",
+            "split": "test",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 4798,
+            "predicted_vehicle_instances": 4016,
+            "count_mae": 4.4574,
+            "count_wape": 0.1747,
+            "precision_iou50": 0.8842,
+            "recall_iou50": 0.7401,
+            "f1_iou50": 0.8058,
+            "tp": 3551,
+            "fp": 465,
+            "fn": 1247,
+            "reference_distinct_vehicles": 42,
+            "predicted_distinct_tracks": 63,
+            "distinct_count_absolute_error": 21,
+            "reference_crossings": 4,
+            "predicted_crossings": 5,
+            "crossing_absolute_error": 1,
+            "idtp": 3158,
+            "idfp": 764,
+            "idfn": 1640,
+            "identity_f1": 0.7243,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          },
+          {
+            "sequence": "MVI_40743",
+            "split": "test",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 1246,
+            "predicted_vehicle_instances": 1430,
+            "count_mae": 1.1596,
+            "count_wape": 0.175,
+            "precision_iou50": 0.8175,
+            "recall_iou50": 0.9382,
+            "f1_iou50": 0.8737,
+            "tp": 1169,
+            "fp": 261,
+            "fn": 77,
+            "reference_distinct_vehicles": 25,
+            "predicted_distinct_tracks": 31,
+            "distinct_count_absolute_error": 6,
+            "reference_crossings": 7,
+            "predicted_crossings": 7,
+            "crossing_absolute_error": 0,
+            "idtp": 1149,
+            "idfp": 211,
+            "idfn": 97,
+            "identity_f1": 0.8818,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          }
+        ]
+      }
+    },
+    "acceptance": {
+      "passed": false,
+      "checks": {
+        "distinct_count_error_reduced": true,
+        "identity_f1_not_worse": true,
+        "line_error_not_worse": false,
+        "frame_count_error_preserved": true,
+        "detection_f1_preserved": true
+      }
+    },
+    "notice": "Confirmed track IDs remain estimates of distinct vehicles; identity switches and occlusion can still cause errors.",
+    "clip_only_scope": "Confirmed uploaded-clip tracks only. The full flow check failed; stream line counting retains the previous policy."
+  },
+  "public_camera": {
+    "checked_at": "2026-11-11T04:36:23.016379+00:00",
+    "source": "https://view.custardlev.uk/video_feed",
+    "publication": "https://diagramchasing.fun/2026/mapping-clouds/stations/bengaluru",
+    "camera_id": "public-banaswadi-webcam",
+    "available": true,
+    "observed_frame_rate": 0.91,
+    "width": 960,
+    "height": 594,
+    "changing_frames": 4,
+    "warmup_placeholders_skipped": 1,
+    "frames": [
+      {
+        "received_at": "2026-11-11T04:36:19.710213+00:00",
+        "width": 960,
+        "height": 594,
+        "sha256": "1f7a4c73de643235ab081789dc6b33c0ed8c6f81c0cba521e9ee3b9c61a5f2fa"
+      },
+      {
+        "received_at": "2026-11-11T04:36:20.732693+00:00",
+        "width": 960,
+        "height": 594,
+        "sha256": "404c2ec81dfeeab4c25b36167e49ddfbc943971ec345a861baee8a57f889a96f"
+      },
+      {
+        "received_at": "2026-11-11T04:36:21.716766+00:00",
+        "width": 960,
+        "height": 594,
+        "sha256": "2428d8e548373b9c323a4e54472c82371b076f04d850b413ce0358403fda7ebe"
+      },
+      {
+        "received_at": "2026-11-11T04:36:23.014432+00:00",
+        "width": 960,
+        "height": 594,
+        "sha256": "18ed33b38e7c38ee93f1282cfc536f0dbf2837c2df228705f8a791f5f68c1b86"
+      }
+    ],
+    "location": {
+      "latitude": 13.0145,
+      "longitude": 77.64935,
+      "confidence": "Approximate public Banaswadi junction reference, not surveyed."
+    },
+    "affiliation": "Independent public webcam; not a Bengaluru Traffic Police feed.",
+    "measurement_validated": false,
+    "notice": "Low-refresh public imagery. Visible-frame estimates require review; reliable distinct counts, flow and queues are not established.",
+    "registered": true,
+    "measurement": {
+      "observation_id": 42009,
+      "sampled_frames": 19,
+      "effective_sample_fps": 0.95,
+      "average_vehicles_in_frame": 3.05,
+      "peak_vehicles_in_frame": 5,
+      "low_refresh_rate": true,
+      "measurement_notice": "Low-refresh imagery supports visible-frame estimates; reliable distinct counts, line flow and queues need a higher frame rate.",
+      "quality_status": "unverified",
+      "vehicle_count": 5,
+      "flow_per_hour": null
+    }
+  }
+}

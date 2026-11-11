@@ -13,8 +13,11 @@ import store
 from core import MODELS_DIR, iso_now
 
 KIND = "hybrid_lstm_rf"
+BLOCK_KINDS = ('hybrid_lstm_rf', 'random_forest', 'cycle_random_forest', 'cycle_gradient_boosting', 'cycle_logistic')
+DAILY_KINDS = ('daily_hybrid_lstm_rf', 'daily_random_forest')
 _LOCK = threading.Lock()
 _LOADED: dict = {"version": None, "model": None}
+_LOADED_DAILY: dict = {'version':None,'model':None}
 
 
 def _decode(row: dict) -> dict:
@@ -32,17 +35,19 @@ def get(version: str) -> dict | None:
     return _decode(row) if row else None
 
 
-def active() -> dict | None:
-    row = store.one("SELECT * FROM model_versions WHERE status='active' ORDER BY activated_at DESC LIMIT 1")
+def active(granularity='block') -> dict | None:
+    kinds = DAILY_KINDS if granularity=='day' else BLOCK_KINDS
+    row = store.one("SELECT * FROM model_versions WHERE status='active' AND kind IN (" + ','.join('?' for _ in kinds) + ") ORDER BY activated_at DESC LIMIT 1", kinds)
     return _decode(row) if row else None
 
 
-def register(version: str, metrics: dict, acceptance: dict, data: dict, trained_by: str, notes: str | None = None) -> str:
+def register(version: str, metrics: dict, acceptance: dict, data: dict, trained_by: str, notes: str | None = None,
+             kind: str = KIND) -> str:
     status = "candidate" if acceptance.get("passed") else "rejected"
     with store.connect() as db:
         db.execute("""INSERT INTO model_versions(version,kind,status,created_at,trained_by,artifact_dir,metrics_json,
           acceptance_json,data_json,notes) VALUES(?,?,?,?,?,?,?,?,?,?)""",
-                   (version, KIND, status, iso_now(), trained_by, version, json.dumps(metrics, default=str),
+                   (version, kind, status, iso_now(), trained_by, version, json.dumps(metrics, default=str),
                     json.dumps(acceptance, default=str), json.dumps(data, default=str), notes))
         db.execute("INSERT INTO audit_log(action,entity_type,entity_id,actor,occurred_at,details_json) VALUES(?,?,?,?,?,?)",
                    ("model_registered", "model_version", version, trained_by, iso_now(), json.dumps({"status": status})))
@@ -60,29 +65,32 @@ def activate(version: str, actor: str) -> dict:
         raise ValueError("The model files for this version are missing from the models folder.")
     if row["status"] != "active":
         with store.connect() as db:
-            db.execute("UPDATE model_versions SET status='retired' WHERE status='active'")
+            kinds = DAILY_KINDS if row['kind'].startswith('daily_') else BLOCK_KINDS
+            db.execute("UPDATE model_versions SET status='retired' WHERE status='active' AND kind IN (" + ','.join('?' for _ in kinds) + ")", kinds)
             db.execute("UPDATE model_versions SET status='active',activated_at=?,activated_by=? WHERE version=?",
                        (iso_now(), actor, version))
             db.execute("INSERT INTO audit_log(action,entity_type,entity_id,actor,occurred_at,details_json) VALUES(?,?,?,?,?,?)",
                        ("model_activated", "model_version", version, actor, iso_now(), json.dumps({"previous_status": row["status"]})))
     with _LOCK:
         _LOADED.update(version=None, model=None)
+        _LOADED_DAILY.update(version=None,model=None)
     return get(version)
 
 
-def load_active():
+def load_active(granularity='block'):
     """(model, registry row) for the active version, or (None, None) when no model is in use."""
-    row = active()
+    row = active(granularity)
     if not row:
         return None, None
     with _LOCK:
-        if _LOADED["version"] == row["version"]:
-            return _LOADED["model"], row
+        cache = _LOADED_DAILY if granularity=='day' else _LOADED
+        if cache['version'] == row['version']:
+            return cache['model'], row
     import hybrid_model
 
     model = hybrid_model.HybridModel.load(MODELS_DIR / row["artifact_dir"], row["version"])
     with _LOCK:
-        _LOADED.update(version=row["version"], model=model)
+        cache.update(version=row['version'],model=model)
     return model, row
 
 

@@ -54,6 +54,9 @@ import fake_vision  # noqa: E402
 import vision  # noqa: E402
 
 vision.analyze_video = fake_vision.analyze_video
+import camera_capture  # noqa: E402
+import base64  # noqa: E402
+camera_capture.snapshot = lambda source: base64.b64decode(fake_vision._preview().split(',', 1)[1])
 fake_vision.STEP_SECONDS = 0.8
 
 # A quick model version so the model screens have an evaluation to show.

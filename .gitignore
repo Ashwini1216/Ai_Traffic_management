@@ -1,12 +1,15 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv
 .vscode/
 node_modules/
 frontend/dist/
 .env
 .env.*
 !.env.example
+LOCAL_LOGIN.txt
+flowstate-before-*.db
 data/*.db
 data/*.db-wal
 data/*.db-shm
@@ -17,6 +20,11 @@ data/*_manifest.json
 data/cctv_footage/
 data/video_samples/
 data/logs/
+data/ultralytics/
+data/matplotlib/
+data/routing/
+data/count_validations/
+data/research/
 # Trained model versions (models/<version>/) and older single-file artifacts.
 models/*/
 models/*.keras

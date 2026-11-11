@@ -28,6 +28,8 @@ import patterns
 import segments
 import store
 import weather
+import data_fusion
+import public_data
 from core import DATA_DIR, ROOT, TIME_BLOCKS, iso_now
 from security import authority_token, signed_in_user
 
@@ -35,6 +37,8 @@ router = APIRouter()
 
 DEFAULT_CLASSES = ["Low", "Medium", "High"]
 METHOD_LABELS = {
+    'daily_model':'Validated daily model on recent daily observations',
+    'daily_historical_pattern':'Daily historical pattern; no measured time-of-day profile',
     "sequence_model": "Hybrid LSTM -> Random Forest model on recent observations",
     "historical_pattern": "Historical pattern for this road, time block, and day type",
     "transfer": "Transferred from similar roads (validated)",
@@ -112,9 +116,13 @@ def signals(segment: dict, target: datetime) -> dict:
                              "precipitation_mm": forecast["precipitation_mm"], "weather_code": forecast["weather_code"],
                              "wet": bool(weather.is_wet(weather.label_from_code(forecast["weather_code"]), forecast["precipitation_mm"]))}
     if target - datetime.now(timezone.utc) <= timedelta(hours=2):
-        recent = store.one("""SELECT observed_end,vehicle_count,flow_per_hour,occupancy,queue_length,camera_id FROM traffic_observations
-          WHERE segment_id=? AND source_type='camera' AND observed_end>=? AND quality_status<>'rejected'
-          ORDER BY observed_end DESC LIMIT 1""", (segment["segment_id"], (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()))
+        current = datetime.now(timezone.utc)
+        recent = store.one("""SELECT o.observed_end,o.vehicle_count,o.flow_per_hour,o.occupancy,o.queue_length,o.camera_id
+          FROM traffic_observations o JOIN cameras c ON c.camera_id=o.camera_id
+          WHERE o.segment_id=? AND o.source_type='camera' AND o.observed_end>=? AND o.observed_end<=?
+          AND o.quality_status='verified' AND c.authorization_status='approved' AND c.operational_status='online'
+          AND COALESCE(o.quality_flags_json,'') NOT LIKE ? ORDER BY o.observed_end DESC LIMIT 1""",
+          (segment['segment_id'], (current-timedelta(minutes=data_fusion.MAX_AGE_MINUTES)).isoformat(), current.isoformat(), '%'+hm.CLIP_FLAG+'%'))
         if recent:
             result["camera"] = recent
     try:
@@ -140,15 +148,7 @@ def cold_start(segment: dict, target: datetime, evidence: dict, classes: list[st
     components = {"time_of_day": GENERIC_BLOCK_LOAD[block] * (0.8 if day.weekday() >= 5 else 1.0)}
     if evidence["incidents"]:
         components["incidents"] = _noisy_or(INCIDENT_WEIGHTS.get(i["category"], 0.25) for i in evidence["incidents"])
-    camera = evidence.get("camera")
-    if camera:
-        parts = []
-        if camera.get("occupancy") is not None:
-            parts.append(min(1.0, camera["occupancy"] * 1.4))
-        if camera.get("queue_length") is not None:
-            parts.append(min(1.0, camera["queue_length"] / 15))
-        if parts:
-            components["camera"] = max(parts)
+    # Camera measurements are fused exactly once, after the baseline.
     if evidence.get("weather", {}) and evidence["weather"].get("wet"):
         components["rain"] = 0.3
     demand_info = evidence.get("planned_demand") or {}
@@ -208,12 +208,18 @@ def forecast(segment_id: str, target: datetime, record: bool = True, reason: str
                       evidence={"window": [{"date": r["date"].isoformat(), "time_block": r["time_block"]} for r in window]})
     elif segment["pattern_ready"] and segment_id in counts:
         probabilities, records, cell = patterns.pattern_distribution(counts[segment_id], target_block, patterns.day_type(target_day), classes)
-        latest = date.fromisoformat(segment["latest_observation"])
+        latest = date.fromisoformat(segment.get('block_latest_observation') or segment['latest_observation'])
         age_days = (now.date() - latest).days
         recency = 1.0 if age_days <= 365 else 0.75 if age_days <= 730 else 0.6
         confidence = min(0.85, records / (records + 10)) * recency
         result.update(method="historical_pattern", probabilities=probabilities, model_version="pattern",
                       evidence={"records": records, "cell": cell, "history_age_days": age_days})
+    elif (daily_result := public_data.outlook(segment_id,target_day)) is not None:
+        confidence = daily_result.pop('confidence')
+        result.update(daily_result)
+        result['requested_time_block'] = target_block
+        result['target_time_block'] = 'Daily'
+        result['target_start'] = datetime.combine(target_day,datetime.min.time(),core.LOCAL_TZ).astimezone(timezone.utc).isoformat()
     else:
         validation = model_registry.transfer_validation() or {}
         donors = [s for s in registry.values() if s["pattern_ready"] and s["segment_id"] != segment_id]
@@ -231,18 +237,29 @@ def forecast(segment_id: str, target: datetime, record: bool = True, reason: str
             confidence = 0.25
             result.update(method="cold_start", probabilities=probabilities, model_version="cold-start-v1",
                           evidence={**details, "reason": "No usable history and no validated transfer for this road."})
+    result['base_probabilities'] = dict(result['probabilities'])
+    result['probabilities'],result['fusion'] = data_fusion.fuse(segment_id,result['probabilities'],target,now)
     result["probabilities"] = {c: round(p, 4) for c, p in result["probabilities"].items()}
     result["predicted_class"] = max(result["probabilities"], key=result["probabilities"].get)
     result["expected_load"] = round(sum(CLASS_LOAD.get(c, 0.5) * p for c, p in result["probabilities"].items()), 3)
     result["confidence"] = {"score": round(confidence, 3), "level": _level(confidence)}
     result["method_label"] = METHOD_LABELS[result["method"]]
+    if result['method'] == 'sequence_model' and model_row.get('kind') == 'random_forest':
+        result['method_label'] = 'Random Forest model on recent observations'
+        result['model_kind'] = 'random_forest'
+    if result['fusion']['applied']:
+        result['method_label'] += ' + fresh verified observation'
     result.setdefault("horizon_blocks", core.blocks_between(now_slot, (target_day, target_block)))
     result["notice"] = ("Research estimate. " + {
-        "sequence_model": "Made from the road's recent observations by the active hybrid model.",
+        "sequence_model": "Made from the road's recent observations by the active validated model.",
         "historical_pattern": "No recent observations: this is how the road usually behaved at this time in past records.",
         "transfer": "This road has too little history; the estimate is borrowed from similar roads.",
         "cold_start": "This road has no usable history; treat this limited-data estimate with caution.",
+        'daily_model':'The active model predicts a whole day. It does not supply a separate measured time-of-day forecast.',
+        'daily_historical_pattern':'Whole-day historical records support this estimate. No time-of-day values were invented; current readings can adjust it separately.',
     }[result["method"]])
+    if result['fusion']['applied']:
+        result['notice'] += ' ' + result['fusion']['notice']
     if record:
         result["prediction_id"] = _record(result, reason)
     return result
@@ -256,29 +273,58 @@ def _record(result: dict, reason: str) -> str:
           confidence,predicted_values_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                    (prediction_id, iso_now(), result["target_date"], result["area"], result["road"], result["target_time_block"],
                     "model_prediction", result["model_version"], result["predicted_class"], json.dumps(result["probabilities"]),
-                    json.dumps({"reason": reason, "evidence": result.get("evidence")}, default=str), result["segment_id"],
+                    json.dumps({"reason": reason, "evidence": result.get("evidence"), 'fusion': result.get('fusion')}, default=str), result["segment_id"],
                     result["target_start"], result["method"], result["horizon_blocks"], result["confidence"]["score"],
                     json.dumps(result.get("predicted_values")) if result.get("predicted_values") else None))
     return prediction_id
 
 
 def record_outcome(db, segment_id: str, observed_date: str, time_block: str, observation: dict) -> None:
-    """Link a later observation to earlier forecasts for the same road and block."""
-    label = observation.get("congestion_level")
-    if label is not None:
-        db.execute("""UPDATE model_predictions SET observed_outcome=?,evaluated_at=? WHERE target_date=? AND target_time_block=?
-          AND (segment_id=? OR (segment_id IS NULL AND target_area=? AND target_road=?)) AND observed_outcome IS NULL""",
-                   (label, iso_now(), observed_date, time_block, segment_id, observation.get("area"), observation.get("road")))
-    observed = {c: observation.get(c) for c in hm.NUMERIC if observation.get(c) is not None}
-    if not observed:
+    """Score a forecast issued before a completed block against verified block truth.
+
+    Short camera intervals, unreviewed values and nowcasts issued after the block
+    started cannot silently become evidence of forecast accuracy.
+    """
+    if observation.get('quality_status') != 'verified' or not observation.get('id'):
         return
-    for row in db.execute("""SELECT prediction_id,predicted_values_json FROM model_predictions WHERE segment_id=? AND target_date=?
-      AND target_time_block=? AND predicted_values_json IS NOT NULL AND errors_json IS NULL""",
+    if time_block=='Daily':
+        start = datetime.combine(date.fromisoformat(observed_date),datetime.min.time(),core.LOCAL_TZ).astimezone(timezone.utc)
+        end = start+timedelta(days=1)
+    else:
+        start, end = core.block_bounds(date.fromisoformat(observed_date), time_block)
+    if end > datetime.now(timezone.utc) or hm.CLIP_FLAG in (observation.get('quality_flags_json') or ''):
+        return
+    if observation.get('observed_start') != start.isoformat() or observation.get('observed_end') != end.isoformat():
+        return
+    observed = {c: observation.get(c) for c in hm.NUMERIC if observation.get(c) is not None}
+    for row in db.execute("""SELECT prediction_id,issue_time,predicted_values_json FROM model_predictions WHERE segment_id=?
+      AND target_date=? AND target_time_block=? AND outcome_observation_id IS NULL""",
                           (segment_id, observed_date, time_block)).fetchall():
-        predicted = json.loads(row["predicted_values_json"])
+        issued = datetime.fromisoformat(row['issue_time'])
+        if issued.tzinfo is None or issued >= start:
+            continue
+        predicted = json.loads(row['predicted_values_json'] or '{}')
         errors = {c: round(abs(predicted[c] - observed[c]), 4) for c in observed if c in predicted}
-        db.execute("UPDATE model_predictions SET observed_values_json=?,errors_json=? WHERE prediction_id=?",
-                   (json.dumps(observed), json.dumps(errors), row["prediction_id"]))
+        if observation.get('congestion_level') is None and not errors:
+            continue
+        db.execute('UPDATE model_predictions SET observed_outcome=?,evaluated_at=?,observed_values_json=?,errors_json=?,outcome_observation_id=? WHERE prediction_id=?',
+                   (observation.get('congestion_level'), iso_now(), json.dumps(observed), json.dumps(errors), observation['id'], row['prediction_id']))
+
+
+def reconcile_outcomes():
+    """Pick up verified blocks that ended after their review and discard retracted truth."""
+    with store.connect() as db:
+        db.execute("""UPDATE model_predictions SET observed_outcome=NULL,evaluated_at=NULL,observed_values_json=NULL,
+          errors_json=NULL,outcome_observation_id=NULL WHERE outcome_observation_id IS NOT NULL AND
+          outcome_observation_id NOT IN (SELECT id FROM traffic_observations WHERE quality_status='verified')""")
+        targets = db.execute("""SELECT DISTINCT segment_id,target_date,target_time_block FROM model_predictions
+          WHERE outcome_observation_id IS NULL AND segment_id IS NOT NULL""").fetchall()
+        for target in targets:
+            records = db.execute("""SELECT * FROM traffic_observations WHERE segment_id=? AND observed_date=? AND time_block=?
+              AND quality_status='verified' ORDER BY verified_at DESC,id DESC""",
+                                 (target['segment_id'], target['target_date'], target['target_time_block'])).fetchall()
+            for observation in records:
+                record_outcome(db, target['segment_id'], target['target_date'], target['target_time_block'], dict(observation))
 
 
 def zone_outlook(target: datetime) -> list[dict]:
@@ -365,8 +411,8 @@ def replay(payload: ReplayInput, actor: str = Depends(authority_token)):
         model = hm.HybridModel.load(core.MODELS_DIR / row["artifact_dir"], row["version"])
     except (OSError, ValueError) as exc:
         raise HTTPException(409, f"The model files could not be loaded: {exc}") from exc
-    frame, _ = history()
-    as_of_slot = hm.slot_of(payload.as_of_date, payload.as_of_time_block)
+    frame = hm.load_daily_history() if model.granularity=='day' else history()[0]
+    as_of_slot = payload.as_of_date.toordinal() if model.granularity=='day' else hm.slot_of(payload.as_of_date, payload.as_of_time_block)
     window = latest_window(frame, payload.segment_id, as_of_slot + 1)
     if not window or window[-1]["slot"] != as_of_slot:
         raise HTTPException(422, "There are no six consecutive observations ending at that block for this road.")
@@ -376,7 +422,7 @@ def replay(payload: ReplayInput, actor: str = Depends(authority_token)):
     actual = frame[frame["segment_id"] == payload.segment_id].set_index("slot")
     steps = []
     for step in path:
-        day, block = hm.slot_date_block(step["slot"])
+        day, block = hm.date_block_for_slot(step['slot'],model.granularity)
         observed = actual.loc[step["slot"]] if step["slot"] in actual.index else None
         steps.append({"date": day.isoformat(), "time_block": block, "predicted_class": step["predicted_class"],
                       "probabilities": {c: round(p, 4) for c, p in step["probabilities"].items()},
@@ -401,7 +447,8 @@ def list_models(actor: str = Depends(authority_token)):
                      {"test": {k: metrics.get("test", {}).get(k) for k in ("accuracy", "macro_f1", "count")},
                       "baselines_test": {n: {"accuracy": b.get("accuracy"), "macro_f1": b.get("macro_f1")}
                                          for n, b in metrics.get("baselines_test", {}).items()},
-                      "lstm_contribution": {k: v for k, v in metrics.get("lstm_contribution", {}).items() if k != "rf_without_lstm_test"},
+                      "lstm_contribution": {k: v for k, v in (metrics.get("lstm_contribution") or {}).items() if k != "rf_without_lstm_test"},
+                      'selected_on_validation': metrics.get('selected_on_validation', False),
                       "transfer_enabled": metrics.get("transfer_validation", {}).get("enabled")})
     return {"models": items, "training": training_status()}
 
@@ -428,6 +475,12 @@ _TRAINING: dict = {"process": None, "started_at": None, "log": None, "actor": No
 _TRAINING_LOCK = threading.Lock()
 
 
+@router.get('/api/model-readiness')
+def model_readiness(actor: str = Depends(authority_token)):
+    from train_hybrid import training_readiness
+    return training_readiness()
+
+
 def training_status() -> dict:
     with _TRAINING_LOCK:
         process = _TRAINING["process"]
@@ -448,10 +501,15 @@ def start_training(activate: bool = False, actor: str = Depends(authority_token)
     with _TRAINING_LOCK:
         if _TRAINING["process"] is not None and _TRAINING["process"].poll() is None:
             raise HTTPException(409, "A training run is already in progress.")
+        from train_hybrid import training_readiness
+        readiness = training_readiness()
+        if not readiness['ready']:
+            raise HTTPException(422, {'message': 'Training needs more usable history.', 'readiness': readiness})
         logs = DATA_DIR / "logs"
         logs.mkdir(parents=True, exist_ok=True)
         log_path = logs / f"training-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.log"
         command = [sys.executable, str(ROOT / "backend" / "train_hybrid.py"), "--trained-by", actor]
+        command += ['--granularity',readiness['granularity']]
         if activate:
             command.append("--activate")
         handle = open(log_path, "w", encoding="utf-8")
@@ -471,22 +529,33 @@ def training_status_endpoint(actor: str = Depends(authority_token)):
 
 @router.get("/api/evaluation")
 def evaluation():
-    """How earlier forecasts compared with what was later observed, by method."""
-    rows = store.rows("""SELECT method,model_version,predicted_class,observed_outcome,errors_json FROM model_predictions
-      WHERE observed_outcome IS NOT NULL OR errors_json IS NOT NULL""")
-    summary: dict[str, dict] = {}
-    for row in rows:
-        key = row["method"] or "legacy"
-        bucket = summary.setdefault(key, {"evaluated": 0, "correct": 0, "errors": {}})
-        if row["observed_outcome"] is not None:
-            bucket["evaluated"] += 1
-            bucket["correct"] += row["predicted_class"] == row["observed_outcome"]
-        for column, value in json.loads(row["errors_json"] or "{}").items():
-            bucket["errors"].setdefault(column, []).append(value)
-    for bucket in summary.values():
-        bucket["accuracy"] = round(bucket["correct"] / bucket["evaluated"], 4) if bucket["evaluated"] else None
-        bucket["mae"] = {c: round(sum(v) / len(v), 4) for c, v in bucket.pop("errors").items()}
-    counts = store.one("""SELECT COUNT(*) AS prediction_count,
-      SUM(CASE WHEN observed_outcome IS NOT NULL THEN 1 ELSE 0 END) AS evaluated_count FROM model_predictions""")
-    return {**counts, "by_method": summary,
-            "message": "Forecasts are linked when a later observation arrives for the same road, date, and time block."}
+    """Evaluate pre-block forecasts against completed, authority-verified block outcomes."""
+    from train_hybrid import scores
+    reconcile_outcomes()
+    rows = store.rows("""SELECT p.method,p.model_version,p.predicted_class,p.observed_outcome,p.errors_json
+      FROM model_predictions p JOIN traffic_observations o ON o.id=p.outcome_observation_id
+      WHERE o.quality_status='verified' AND (p.observed_outcome IS NOT NULL OR p.errors_json IS NOT NULL)""")
+
+    def summarize(key):
+        groups = {}
+        for row in rows:
+            groups.setdefault(row[key] or 'legacy', []).append(row)
+        output = {}
+        for name, records in groups.items():
+            labelled = [r for r in records if r['observed_outcome'] is not None]
+            truth = [r['observed_outcome'] for r in labelled]
+            guess = [r['predicted_class'] for r in labelled]
+            metrics = scores(truth, guess, DEFAULT_CLASSES)
+            errors = {}
+            for row in records:
+                for column, value in json.loads(row['errors_json'] or '{}').items():
+                    errors.setdefault(column, []).append(value)
+            output[name] = {**metrics, 'evaluated': len(labelled), 'correct': sum(a == b for a, b in zip(truth, guess)),
+                            'accuracy': metrics.get('accuracy'), 'macro_f1': metrics.get('macro_f1'),
+                            'mae': {c: round(sum(v) / len(v), 4) for c, v in errors.items()},
+                            'limited_sample': len(labelled) < 30}
+        return output
+    counts = store.one('SELECT COUNT(*) AS prediction_count FROM model_predictions')
+    return {**counts, 'evaluated_count': sum(r['observed_outcome'] is not None for r in rows),
+            'by_method': summarize('method'), 'by_model': summarize('model_version'),
+            'message': 'Only forecasts issued before a completed block and compared with a verified block observation are scored. Short camera intervals and unreviewed values are excluded.'}

@@ -40,9 +40,11 @@ import notifications
 import observations
 import places
 import routing
+import road_routing
 import scheduler
 import segments
 import store
+import validation_reports
 import weather
 from core import DATA_DIR, ROOT, iso_now
 from security import (AUTHORITY_PASSWORD_MIN, PASSWORDS, _decode_bearer, authority_token, check_sign_in_allowed,
@@ -97,7 +99,7 @@ app.add_middleware(
     allow_credentials=False, allow_methods=["GET", "POST", "PATCH", "OPTIONS"], allow_headers=["Content-Type", "Authorization"],
 )
 for module in (segments, weather, observations, forecasting, incidents, demand, routing, notifications, cameras, alerts,
-               scheduler, access):
+               scheduler, access, validation_reports):
     app.include_router(module.router)
 if (FRONTEND_DIST / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="frontend-assets")
@@ -242,7 +244,15 @@ def current_account(authorization: str | None = Header(default=None)):
 @app.get("/api/map/config")
 def map_config():
     return {"center": [12.9716, 77.5946], "zoom": 11, "google_routing_configured": core.google_configured(),
+            "routing_provider": road_routing.provider(),
             "google_maps_browser_key": core.google_browser_key(), "place_search": places.provider_setting()}
+
+
+@app.get('/api/routing/status')
+def routing_status(actor: str = Depends(authority_token)):
+    import local_routing
+    return {'provider':road_routing.provider(),'local_graph':local_routing.status(),
+            'notice':'OpenStreetMap road geometry is not a live traffic feed.'}
 
 
 @app.get("/api/geocode")
@@ -263,14 +273,28 @@ def health():
 def summary():
     totals = store.one("""SELECT COUNT(*) AS record_count, COUNT(DISTINCT road) AS road_count,
         COUNT(DISTINCT area) AS area_count, MIN(observed_date) AS date_start, MAX(observed_date) AS date_end
-        FROM traffic_observations WHERE source_type='historical_dataset'""")
+        FROM traffic_observations WHERE source_type IN ('historical_dataset','public_daily_dataset')""")
     counts = store.rows("""SELECT COALESCE(congestion_level,'Unknown') AS label, COUNT(*) AS count
-        FROM traffic_observations WHERE source_type='historical_dataset' GROUP BY congestion_level""")
+        FROM traffic_observations WHERE source_type IN ('historical_dataset','public_daily_dataset') GROUP BY congestion_level""")
+    daily = store.one("SELECT COUNT(*) AS n FROM traffic_observations WHERE source_type='public_daily_dataset'")['n']
+    blocks = totals['record_count'] - daily
+    daily_only = bool(daily and not blocks)
+    provenance_path = DATA_DIR / 'research' / 'original-archive' / 'source-manifest.json'
+    provenance = json.loads(provenance_path.read_text()) if provenance_path.is_file() else None
     return {
-        "project": "Bengaluru Traffic Monitor", "dataset": "bangalore_traffic_timely_dataset.zip",
-        "source_type": "historical_dataset", **totals,
+        "project": "Bengaluru Traffic Monitor",
+        "dataset": "Bangalore's Traffic Pulse (daily)" if daily_only else
+                   'Historical block archive and public daily records' if daily else 'bangalore_traffic_timely_dataset.zip',
+        "source_type": 'public_daily_dataset' if daily_only else 'mixed_historical' if daily else 'historical_dataset', **totals,
+        'daily_record_count': daily, 'block_record_count': blocks,
+        'time_granularity': 'day' if daily_only else 'mixed' if daily else 'block',
+        'original_archive_restored': bool(provenance and provenance.get('matches_saved_project_facts')),
+        'block_provenance_notice': provenance['notice'] if provenance else None,
+        'daily_label_notice': 'Daily severity labels are project-defined equal thirds of the source congestion index; '
+                              'they are not independently verified sensor labels.' if daily else None,
         "traffic_situation_counts": {row["label"]: row["count"] for row in counts},
-        "notice": "Historical dataset records are not live traffic observations.",
+        "notice": "Historical dataset records are not live traffic observations." +
+                  (' Daily records do not measure separate time-of-day conditions.' if daily else ''),
     }
 
 

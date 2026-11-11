@@ -17,7 +17,7 @@ I  verified incidents and official notices (accidents, hazards, closures) in for
 W  forecast weather at departure: thunderstorm 0.5, heavy rain (above 5 mm) 0.4, rain 0.25,
    fog 0.2, wind of 40 km/h or more 0.15, combined with the same noisy-OR.
 
-A route through an official road closure is marked restricted and ranked after open routes.
+A route through a verified road closure is excluded from recommendations.
 Open routes are ranked by risk plus a time penalty: min(30, 50 x (duration / fastest - 1)).
 Each route lists the reasons behind its score. Departure times are compared on the forecast
 evidence only, because Google's traffic delay is known only for the chosen time.
@@ -26,6 +26,8 @@ This is an unvalidated research heuristic; the response lists its evidence and g
 from __future__ import annotations
 
 import json
+import hashlib
+import math
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -37,6 +39,7 @@ import demand
 import forecasting
 import store
 import weather
+import road_routing
 from core import iso_now
 from security import signed_in_user
 
@@ -51,7 +54,7 @@ SAFER_MIN_REDUCTION = 10.0
 LEAVE_EARLY_MIN_DELAY_S = 5 * 60
 SCORING_METHOD = ("Noisy-OR of traffic (congestion forecasts, or Google's traffic delay when higher; 0.9), planned demand "
                   "above usual (0.5), verified incidents and notices within 200 m, and forecast weather (storm, rain, fog, "
-                  "wind); closures mark a route restricted. Unvalidated research heuristic.")
+                  "wind); verified closed routes are excluded. Unvalidated research heuristic.")
 CATEGORY_NAMES = {"vip_movement": "VIP movement", "metro_construction": "Metro construction"}
 
 
@@ -74,8 +77,8 @@ def _noisy_or(values) -> float:
 
 def _candidate_routes(origin: tuple[float, float], destination: tuple[float, float], departure: datetime,
                       leave_now: bool, profile: str) -> tuple[list[dict], str]:
-    """Google alternatives when configured; otherwise one straight-line corridor estimate."""
-    if core.google_configured():
+    """Google alternatives when configured; otherwise actual OpenStreetMap road routes."""
+    if road_routing.provider() == "google":
         mode = {"driving": "DRIVE", "cycling": "BICYCLE", "walking": "WALK"}[profile]
         request = {
             "origin": {"location": {"latLng": {"latitude": origin[0], "longitude": origin[1]}}},
@@ -102,11 +105,11 @@ def _candidate_routes(origin: tuple[float, float], destination: tuple[float, flo
                            "distance_m": float(route.get("distanceMeters", 0)), "duration_s": duration,
                            "static_duration_s": static if profile == "driving" and static else None})
         return routes, "Google Routes API"
-    estimate = demand.plan_route(origin, destination, departure)
-    return [estimate], "Straight-line corridor estimate (Google Routes is not configured)"
+    return road_routing.candidates(origin, destination, profile, departure=departure), "OpenStreetMap road routing"
 
 
-def _incidents_on_route(coordinates: list[list[float]], departure: datetime, duration_s: float, length_m: float) -> list[dict]:
+def _incidents_on_route(coordinates: list[list[float]], departure: datetime, duration_s: float, length_m: float,
+                        route: dict | None = None) -> list[dict]:
     end = departure + timedelta(seconds=duration_s)
     rows = store.rows("""SELECT incident_id,category,area,road,latitude,longitude,created_at,starts_at,expires_at,official,closure,
       severity FROM incidents WHERE status='verified' AND latitude IS NOT NULL AND (expires_at IS NULL OR expires_at>?)
@@ -116,6 +119,11 @@ def _incidents_on_route(coordinates: list[list[float]], departure: datetime, dur
         distance, along = core.locate_on_polyline(row["latitude"], row["longitude"], coordinates)
         if distance > INCIDENT_RADIUS_M:
             continue
+        if row['closure']:
+            import local_routing
+            uses_edge = local_routing.closure_uses_route(route, row['latitude'], row['longitude'])
+            if uses_edge is False or (uses_edge is None and distance > 35):
+                continue
         reached = departure + timedelta(seconds=duration_s * along / (length_m or 1.0))
         starts, expires = core.parse_utc(row["starts_at"]), core.parse_utc(row["expires_at"])
         if (starts and reached < starts) or (expires and reached >= expires):
@@ -125,6 +133,60 @@ def _incidents_on_route(coordinates: list[list[float]], departure: datetime, dur
                       "closure": bool(row["closure"]), "severity": row["severity"], "reached_at": reached.isoformat(),
                       "latitude": row["latitude"], "longitude": row["longitude"]})
     return found
+
+
+def revision() -> str:
+    """An inexpensive event fingerprint, with no account or private camera data."""
+    events = store.rows("""SELECT incident_id,updated_at,starts_at,expires_at FROM incidents
+      WHERE status='verified' AND (expires_at IS NULL OR expires_at>?) ORDER BY incident_id""", (iso_now(),))
+    observations = store.one("""SELECT MAX(id) AS last_id,MAX(verified_at) AS reviewed FROM traffic_observations
+      WHERE quality_status='verified'""")
+    return hashlib.sha256(json.dumps([events, observations], sort_keys=True).encode()).hexdigest()[:20]
+
+
+@router.get('/api/routes/state')
+def route_state(actor: str = Depends(signed_in_user)):
+    return {"revision": revision(), "checked_at": iso_now()}
+
+
+def _open_candidates(routes, origin, destination, departure, profile):
+    """Never recommend a verified closed road; try road-network detours if needed."""
+    blocked, available = [], []
+    for route in routes:
+        closures = [i for i in _incidents_on_route(route['coordinates'], departure, route['duration_s'],
+                    core.polyline_length_m(route['coordinates']), route) if i['closure']]
+        if closures:
+            blocked.extend(closures)
+        else:
+            available.append(route)
+    if not available and blocked and road_routing.provider() != 'google':
+        incident = blocked[0]
+        lat, lon = incident['latitude'], incident['longitude']
+        dx = (destination[1]-origin[1])*math.cos(math.radians(lat))
+        dy = destination[0]-origin[0]
+        length = math.hypot(dx,dy) or 1
+        for offset in (.007,.014):
+            for sign in (-1,1):
+                # Two actual-road waypoints on the chosen side of the obstruction.
+                via = [(lat + dy/length*.003 + sign*dx/length*offset,
+                        lon + (dx/length*.003-sign*dy/length*offset)/math.cos(math.radians(lat))),
+                       (lat - dy/length*.003 + sign*dx/length*offset,
+                        lon + (-dx/length*.003-sign*dy/length*offset)/math.cos(math.radians(lat)))]
+                via.sort(key=lambda p: core.haversine_m(*origin,*p))
+                try:
+                    candidates = road_routing.candidates(origin,destination,profile,via=via)
+                except HTTPException:
+                    continue
+                for route in candidates:
+                    if not any(i['closure'] for i in _incidents_on_route(route['coordinates'],departure,
+                                route['duration_s'],core.polyline_length_m(route['coordinates']),route)):
+                        available.append(route)
+            if available:
+                break
+    if not available:
+        raise HTTPException(409, {'message':'No open road route was found. A verified closure blocks the available routes. Try another destination or departure time.',
+                                  'code':'no_open_route','closure_ids':sorted({i['incident_id'] for i in blocked})})
+    return available, sorted({i['incident_id'] for i in blocked})
 
 
 def _incident_component(items: list[dict]) -> float:
@@ -220,8 +282,9 @@ def assess_route(route: dict, departure: datetime, origin, destination, live: bo
         roads.append({"segment_id": match["segment_id"], "area": outlook["area"], "road": outlook["road"],
                       "passes_at": passes_at.isoformat(), "predicted_class": outlook["predicted_class"],
                       "expected_load": outlook["expected_load"], "method": outlook["method"],
+                      "fusion": outlook.get('fusion',{}),
                       "confidence": outlook["confidence"]["level"], "planned_pcu": planned["pcu"], "demand_index": planned["demand_index"]})
-    incidents_found = _incidents_on_route(route["coordinates"], departure, route["duration_s"], length)
+    incidents_found = _incidents_on_route(route["coordinates"], departure, route["duration_s"], length, route)
     weather_score, weather_context, weather_reasons = _weather_component(origin, destination, departure)
     loads = [r["expected_load"] for r in roads]
     congestion = 0.6 * max(loads) + 0.4 * sum(loads) / len(loads) if loads else None
@@ -244,8 +307,10 @@ def assess_route(route: dict, departure: datetime, origin, destination, live: bo
         gaps.append("Forecasts on this route are limited-data estimates.")
     if weather_context is None:
         gaps.append("No weather forecast is stored for this time; open a route again after weather is collected.")
-    if route["source"] != "google_route":
+    if route["source"] == "straight_line_estimate":
         gaps.append("Road routing is unavailable, so this is a straight-line corridor estimate.")
+    elif route["source"] in {"osm_route", "local_osm_route"}:
+        gaps.append("Travel time is a road-profile estimate, not a live traffic measurement.")
     return {"risk_score": round(risk, 1), "risk_level": _risk_level(risk), "forecast_risk_score": round(forecast_risk, 1),
             "restricted": any(i["closure"] for i in incidents_found),
             "components": {"congestion": None if congestion is None else round(congestion, 3),
@@ -328,6 +393,7 @@ def recommend(origin: tuple[float, float], destination: tuple[float, float], dep
     if leave_now:
         departure = now
     routes, provider = _candidate_routes(origin, destination, departure, leave_now, profile)
+    routes, avoided = _open_candidates(routes, origin, destination, departure, profile)
     fastest = min((r["duration_s"] for r in routes), default=1.0) or 1.0
     scored = []
     for index, route in enumerate(routes):
@@ -337,6 +403,7 @@ def recommend(origin: tuple[float, float], destination: tuple[float, float], dep
         scored.append({"route_index": index, "distance_m": route["distance_m"], "baseline_duration_s": route["duration_s"],
                        "geometry": {"type": "LineString", "coordinates": route["coordinates"]}, "legs": [],
                        "source_type": route["source"], "rank_cost": round(assessed["risk_score"] + time_penalty, 1),
+                       "routing_algorithm": route.get("algorithm", "Google Routes"),
                        "time_penalty": round(time_penalty, 1), "nearby_verified_incidents": assessed["incidents"],
                        "weather_penalty": round(assessed["components"]["weather"] * 100, 1), **assessed, "_route": route})
     scored.sort(key=lambda item: (item["restricted"], item["rank_cost"], item["baseline_duration_s"]))
@@ -345,6 +412,8 @@ def recommend(origin: tuple[float, float], destination: tuple[float, float], dep
     for item in scored:
         item.pop("_route")
     notes = travel_notes(scored, leave_now)
+    if avoided:
+        notes.insert(0, {"kind":"safer_route", "message":"Verified road closures were excluded. These routes avoid the blocked roads."})
     route_id = str(uuid.uuid4())
     # Keep the evidence behind each score for later review. Origin and destination are
     # personal travel details, so they are not stored with the assessment.
@@ -359,6 +428,7 @@ def recommend(origin: tuple[float, float], destination: tuple[float, float], dep
         db.execute("""INSERT INTO route_assessments(route_id,issue_time,provider,source_type,scoring_method,route_results_json)
           VALUES(?,?,?,?,?,?)""", (route_id, iso_now(), provider, scored[0]["source_type"], SCORING_METHOD, json.dumps(record, default=str)))
     return {"route_id": route_id, "provider": provider, "routes": scored, "scoring_method": SCORING_METHOD,
+            "avoided_closure_ids": avoided, "revision": revision(),
             "departure_at": departure.isoformat(), "leave_now": leave_now, "travel_notes": notes,
             "traffic_data_coverage": "Forecasts for registered roads on each route; see data_gaps for missing evidence.",
             "weather_status": "provider_forecast_used" if best["weather_context"] else "unavailable",

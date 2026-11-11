@@ -1,0 +1,1504 @@
+{
+  "evaluated_at": "2026-11-11T03:58:41.771696+00:00",
+  "source": "https://sites.google.com/view/daweidu/projects/ua-detrac",
+  "scope": "Four newly acquired official test scenes; previous test scenes excluded. Chinese road footage, not Bengaluru site validation.",
+  "metric_scope": "Common every-second-source-frame metric frames. Visible detections use >=0.35 confidence independently of track confirmation. Identity metrics use confirmed association trajectories.",
+  "detector": {
+    "weights": "yolov8s.pt",
+    "imgsz": 960,
+    "detection_confidence": 0.35,
+    "agnostic_nms": true
+  },
+  "selection": {
+    "selected_at": "2026-11-11T03:56:59.772908+00:00",
+    "policy": {
+      "name": "native_strict",
+      "step": 1,
+      "confidence": 0.1,
+      "new_track": 0.55,
+      "buffer": 90,
+      "min_hits": 5
+    },
+    "selection_period": "Official train scenes only",
+    "criterion": "Pass fixed preservation checks, then lower distinct-count error, higher identity F1, lower crossing error.",
+    "trials": [
+      {
+        "policy": {
+          "name": "previous_sampled",
+          "step": 2,
+          "confidence": 0.35,
+          "new_track": 0.25,
+          "buffer": 30,
+          "min_hits": 1
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 4091,
+          "predicted_vehicle_instances": 4188,
+          "count_mae": 0.9827,
+          "count_wape": 0.1806,
+          "precision_iou50": 0.8773,
+          "recall_iou50": 0.8981,
+          "f1_iou50": 0.8875,
+          "tp": 3674,
+          "fp": 514,
+          "fn": 417,
+          "reference_distinct_vehicles": 98,
+          "predicted_distinct_tracks": 112,
+          "distinct_count_absolute_error": 20,
+          "reference_crossings": 48,
+          "predicted_crossings": 48,
+          "crossing_absolute_error": 0,
+          "idtp": 3447,
+          "idfp": 512,
+          "idfn": 644,
+          "identity_f1": 0.8564
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_41063",
+            "split": "validation",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 1164,
+            "predicted_vehicle_instances": 1042,
+            "count_mae": 0.7979,
+            "count_wape": 0.1289,
+            "precision_iou50": 0.9319,
+            "recall_iou50": 0.8342,
+            "f1_iou50": 0.8803,
+            "tp": 971,
+            "fp": 71,
+            "fn": 193,
+            "reference_distinct_vehicles": 46,
+            "predicted_distinct_tracks": 43,
+            "distinct_count_absolute_error": 3,
+            "reference_crossings": 16,
+            "predicted_crossings": 16,
+            "crossing_absolute_error": 0,
+            "idtp": 810,
+            "idfp": 91,
+            "idfn": 354,
+            "identity_f1": 0.7845,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_39761",
+            "split": "validation",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 659,
+            "predicted_vehicle_instances": 791,
+            "count_mae": 0.766,
+            "count_wape": 0.2185,
+            "precision_iou50": 0.8167,
+            "recall_iou50": 0.9803,
+            "f1_iou50": 0.891,
+            "tp": 646,
+            "fp": 145,
+            "fn": 13,
+            "reference_distinct_vehicles": 15,
+            "predicted_distinct_tracks": 25,
+            "distinct_count_absolute_error": 10,
+            "reference_crossings": 9,
+            "predicted_crossings": 9,
+            "crossing_absolute_error": 0,
+            "idtp": 641,
+            "idfp": 99,
+            "idfn": 18,
+            "identity_f1": 0.9164,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_63521",
+            "split": "validation",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 1173,
+            "predicted_vehicle_instances": 1043,
+            "count_mae": 0.8085,
+            "count_wape": 0.1296,
+            "precision_iou50": 0.9885,
+            "recall_iou50": 0.8789,
+            "f1_iou50": 0.9305,
+            "tp": 1031,
+            "fp": 12,
+            "fn": 142,
+            "reference_distinct_vehicles": 21,
+            "predicted_distinct_tracks": 22,
+            "distinct_count_absolute_error": 1,
+            "reference_crossings": 12,
+            "predicted_crossings": 12,
+            "crossing_absolute_error": 0,
+            "idtp": 976,
+            "idfp": 44,
+            "idfn": 197,
+            "identity_f1": 0.8901,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_40141",
+            "split": "validation",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1095,
+            "predicted_vehicle_instances": 1312,
+            "count_mae": 1.5585,
+            "count_wape": 0.2676,
+            "precision_iou50": 0.782,
+            "recall_iou50": 0.937,
+            "f1_iou50": 0.8525,
+            "tp": 1026,
+            "fp": 286,
+            "fn": 69,
+            "reference_distinct_vehicles": 16,
+            "predicted_distinct_tracks": 22,
+            "distinct_count_absolute_error": 6,
+            "reference_crossings": 11,
+            "predicted_crossings": 11,
+            "crossing_absolute_error": 0,
+            "idtp": 1020,
+            "idfp": 278,
+            "idfn": 75,
+            "identity_f1": 0.8525,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          }
+        ]
+      },
+      {
+        "policy": {
+          "name": "native_rate",
+          "step": 1,
+          "confidence": 0.35,
+          "new_track": 0.25,
+          "buffer": 30,
+          "min_hits": 1
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 4091,
+          "predicted_vehicle_instances": 4188,
+          "count_mae": 0.9827,
+          "count_wape": 0.1806,
+          "precision_iou50": 0.8773,
+          "recall_iou50": 0.8981,
+          "f1_iou50": 0.8875,
+          "tp": 3674,
+          "fp": 514,
+          "fn": 417,
+          "reference_distinct_vehicles": 98,
+          "predicted_distinct_tracks": 131,
+          "distinct_count_absolute_error": 33,
+          "reference_crossings": 48,
+          "predicted_crossings": 48,
+          "crossing_absolute_error": 0,
+          "idtp": 3566,
+          "idfp": 497,
+          "idfn": 525,
+          "identity_f1": 0.8747
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_41063",
+            "split": "validation",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 1164,
+            "predicted_vehicle_instances": 1042,
+            "count_mae": 0.7979,
+            "count_wape": 0.1289,
+            "precision_iou50": 0.9319,
+            "recall_iou50": 0.8342,
+            "f1_iou50": 0.8803,
+            "tp": 971,
+            "fp": 71,
+            "fn": 193,
+            "reference_distinct_vehicles": 46,
+            "predicted_distinct_tracks": 58,
+            "distinct_count_absolute_error": 12,
+            "reference_crossings": 16,
+            "predicted_crossings": 16,
+            "crossing_absolute_error": 0,
+            "idtp": 885,
+            "idfp": 95,
+            "idfn": 279,
+            "identity_f1": 0.8256,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_39761",
+            "split": "validation",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 659,
+            "predicted_vehicle_instances": 791,
+            "count_mae": 0.766,
+            "count_wape": 0.2185,
+            "precision_iou50": 0.8167,
+            "recall_iou50": 0.9803,
+            "f1_iou50": 0.891,
+            "tp": 646,
+            "fp": 145,
+            "fn": 13,
+            "reference_distinct_vehicles": 15,
+            "predicted_distinct_tracks": 29,
+            "distinct_count_absolute_error": 14,
+            "reference_crossings": 9,
+            "predicted_crossings": 9,
+            "crossing_absolute_error": 0,
+            "idtp": 642,
+            "idfp": 111,
+            "idfn": 17,
+            "identity_f1": 0.9093,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_63521",
+            "split": "validation",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 1173,
+            "predicted_vehicle_instances": 1043,
+            "count_mae": 0.8085,
+            "count_wape": 0.1296,
+            "precision_iou50": 0.9885,
+            "recall_iou50": 0.8789,
+            "f1_iou50": 0.9305,
+            "tp": 1031,
+            "fp": 12,
+            "fn": 142,
+            "reference_distinct_vehicles": 21,
+            "predicted_distinct_tracks": 21,
+            "distinct_count_absolute_error": 0,
+            "reference_crossings": 12,
+            "predicted_crossings": 12,
+            "crossing_absolute_error": 0,
+            "idtp": 1014,
+            "idfp": 13,
+            "idfn": 159,
+            "identity_f1": 0.9218,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          },
+          {
+            "sequence": "MVI_40141",
+            "split": "validation",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1095,
+            "predicted_vehicle_instances": 1312,
+            "count_mae": 1.5585,
+            "count_wape": 0.2676,
+            "precision_iou50": 0.782,
+            "recall_iou50": 0.937,
+            "f1_iou50": 0.8525,
+            "tp": 1026,
+            "fp": 286,
+            "fn": 69,
+            "reference_distinct_vehicles": 16,
+            "predicted_distinct_tracks": 23,
+            "distinct_count_absolute_error": 7,
+            "reference_crossings": 11,
+            "predicted_crossings": 11,
+            "crossing_absolute_error": 0,
+            "idtp": 1025,
+            "idfp": 278,
+            "idfn": 70,
+            "identity_f1": 0.8549,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 1
+          }
+        ]
+      },
+      {
+        "policy": {
+          "name": "native_recovery",
+          "step": 1,
+          "confidence": 0.1,
+          "new_track": 0.35,
+          "buffer": 60,
+          "min_hits": 2
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 4091,
+          "predicted_vehicle_instances": 4188,
+          "count_mae": 0.9827,
+          "count_wape": 0.1806,
+          "precision_iou50": 0.8773,
+          "recall_iou50": 0.8981,
+          "f1_iou50": 0.8875,
+          "tp": 3674,
+          "fp": 514,
+          "fn": 417,
+          "reference_distinct_vehicles": 98,
+          "predicted_distinct_tracks": 124,
+          "distinct_count_absolute_error": 26,
+          "reference_crossings": 48,
+          "predicted_crossings": 48,
+          "crossing_absolute_error": 0,
+          "idtp": 3657,
+          "idfp": 748,
+          "idfn": 434,
+          "identity_f1": 0.8609
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_41063",
+            "split": "validation",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 1164,
+            "predicted_vehicle_instances": 1042,
+            "count_mae": 0.7979,
+            "count_wape": 0.1289,
+            "precision_iou50": 0.9319,
+            "recall_iou50": 0.8342,
+            "f1_iou50": 0.8803,
+            "tp": 971,
+            "fp": 71,
+            "fn": 193,
+            "reference_distinct_vehicles": 46,
+            "predicted_distinct_tracks": 51,
+            "distinct_count_absolute_error": 5,
+            "reference_crossings": 16,
+            "predicted_crossings": 16,
+            "crossing_absolute_error": 0,
+            "idtp": 907,
+            "idfp": 108,
+            "idfn": 257,
+            "identity_f1": 0.8325,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 2
+          },
+          {
+            "sequence": "MVI_39761",
+            "split": "validation",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 659,
+            "predicted_vehicle_instances": 791,
+            "count_mae": 0.766,
+            "count_wape": 0.2185,
+            "precision_iou50": 0.8167,
+            "recall_iou50": 0.9803,
+            "f1_iou50": 0.891,
+            "tp": 646,
+            "fp": 145,
+            "fn": 13,
+            "reference_distinct_vehicles": 15,
+            "predicted_distinct_tracks": 30,
+            "distinct_count_absolute_error": 15,
+            "reference_crossings": 9,
+            "predicted_crossings": 9,
+            "crossing_absolute_error": 0,
+            "idtp": 643,
+            "idfp": 290,
+            "idfn": 16,
+            "identity_f1": 0.8078,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 2
+          },
+          {
+            "sequence": "MVI_63521",
+            "split": "validation",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 1173,
+            "predicted_vehicle_instances": 1043,
+            "count_mae": 0.8085,
+            "count_wape": 0.1296,
+            "precision_iou50": 0.9885,
+            "recall_iou50": 0.8789,
+            "f1_iou50": 0.9305,
+            "tp": 1031,
+            "fp": 12,
+            "fn": 142,
+            "reference_distinct_vehicles": 21,
+            "predicted_distinct_tracks": 21,
+            "distinct_count_absolute_error": 0,
+            "reference_crossings": 12,
+            "predicted_crossings": 12,
+            "crossing_absolute_error": 0,
+            "idtp": 1023,
+            "idfp": 23,
+            "idfn": 150,
+            "identity_f1": 0.922,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 2
+          },
+          {
+            "sequence": "MVI_40141",
+            "split": "validation",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1095,
+            "predicted_vehicle_instances": 1312,
+            "count_mae": 1.5585,
+            "count_wape": 0.2676,
+            "precision_iou50": 0.782,
+            "recall_iou50": 0.937,
+            "f1_iou50": 0.8525,
+            "tp": 1026,
+            "fp": 286,
+            "fn": 69,
+            "reference_distinct_vehicles": 16,
+            "predicted_distinct_tracks": 22,
+            "distinct_count_absolute_error": 6,
+            "reference_crossings": 11,
+            "predicted_crossings": 11,
+            "crossing_absolute_error": 0,
+            "idtp": 1084,
+            "idfp": 327,
+            "idfn": 11,
+            "identity_f1": 0.8651,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 2
+          }
+        ]
+      },
+      {
+        "policy": {
+          "name": "native_confirmed",
+          "step": 1,
+          "confidence": 0.1,
+          "new_track": 0.45,
+          "buffer": 60,
+          "min_hits": 3
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 4091,
+          "predicted_vehicle_instances": 4188,
+          "count_mae": 0.9827,
+          "count_wape": 0.1806,
+          "precision_iou50": 0.8773,
+          "recall_iou50": 0.8981,
+          "f1_iou50": 0.8875,
+          "tp": 3674,
+          "fp": 514,
+          "fn": 417,
+          "reference_distinct_vehicles": 98,
+          "predicted_distinct_tracks": 109,
+          "distinct_count_absolute_error": 11,
+          "reference_crossings": 48,
+          "predicted_crossings": 48,
+          "crossing_absolute_error": 0,
+          "idtp": 3650,
+          "idfp": 550,
+          "idfn": 441,
+          "identity_f1": 0.8805
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_41063",
+            "split": "validation",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 1164,
+            "predicted_vehicle_instances": 1042,
+            "count_mae": 0.7979,
+            "count_wape": 0.1289,
+            "precision_iou50": 0.9319,
+            "recall_iou50": 0.8342,
+            "f1_iou50": 0.8803,
+            "tp": 971,
+            "fp": 71,
+            "fn": 193,
+            "reference_distinct_vehicles": 46,
+            "predicted_distinct_tracks": 49,
+            "distinct_count_absolute_error": 3,
+            "reference_crossings": 16,
+            "predicted_crossings": 16,
+            "crossing_absolute_error": 0,
+            "idtp": 903,
+            "idfp": 96,
+            "idfn": 261,
+            "identity_f1": 0.835,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          },
+          {
+            "sequence": "MVI_39761",
+            "split": "validation",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 659,
+            "predicted_vehicle_instances": 791,
+            "count_mae": 0.766,
+            "count_wape": 0.2185,
+            "precision_iou50": 0.8167,
+            "recall_iou50": 0.9803,
+            "f1_iou50": 0.891,
+            "tp": 646,
+            "fp": 145,
+            "fn": 13,
+            "reference_distinct_vehicles": 15,
+            "predicted_distinct_tracks": 18,
+            "distinct_count_absolute_error": 3,
+            "reference_crossings": 9,
+            "predicted_crossings": 9,
+            "crossing_absolute_error": 0,
+            "idtp": 643,
+            "idfp": 139,
+            "idfn": 16,
+            "identity_f1": 0.8924,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          },
+          {
+            "sequence": "MVI_63521",
+            "split": "validation",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 1173,
+            "predicted_vehicle_instances": 1043,
+            "count_mae": 0.8085,
+            "count_wape": 0.1296,
+            "precision_iou50": 0.9885,
+            "recall_iou50": 0.8789,
+            "f1_iou50": 0.9305,
+            "tp": 1031,
+            "fp": 12,
+            "fn": 142,
+            "reference_distinct_vehicles": 21,
+            "predicted_distinct_tracks": 21,
+            "distinct_count_absolute_error": 0,
+            "reference_crossings": 12,
+            "predicted_crossings": 12,
+            "crossing_absolute_error": 0,
+            "idtp": 1020,
+            "idfp": 19,
+            "idfn": 153,
+            "identity_f1": 0.9222,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          },
+          {
+            "sequence": "MVI_40141",
+            "split": "validation",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1095,
+            "predicted_vehicle_instances": 1312,
+            "count_mae": 1.5585,
+            "count_wape": 0.2676,
+            "precision_iou50": 0.782,
+            "recall_iou50": 0.937,
+            "f1_iou50": 0.8525,
+            "tp": 1026,
+            "fp": 286,
+            "fn": 69,
+            "reference_distinct_vehicles": 16,
+            "predicted_distinct_tracks": 21,
+            "distinct_count_absolute_error": 5,
+            "reference_crossings": 11,
+            "predicted_crossings": 11,
+            "crossing_absolute_error": 0,
+            "idtp": 1084,
+            "idfp": 296,
+            "idfn": 11,
+            "identity_f1": 0.876,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          }
+        ]
+      },
+      {
+        "policy": {
+          "name": "native_strict",
+          "step": 1,
+          "confidence": 0.1,
+          "new_track": 0.55,
+          "buffer": 90,
+          "min_hits": 5
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 4091,
+          "predicted_vehicle_instances": 4188,
+          "count_mae": 0.9827,
+          "count_wape": 0.1806,
+          "precision_iou50": 0.8773,
+          "recall_iou50": 0.8981,
+          "f1_iou50": 0.8875,
+          "tp": 3674,
+          "fp": 514,
+          "fn": 417,
+          "reference_distinct_vehicles": 98,
+          "predicted_distinct_tracks": 102,
+          "distinct_count_absolute_error": 6,
+          "reference_crossings": 48,
+          "predicted_crossings": 48,
+          "crossing_absolute_error": 0,
+          "idtp": 3626,
+          "idfp": 499,
+          "idfn": 465,
+          "identity_f1": 0.8827
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_41063",
+            "split": "validation",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 1164,
+            "predicted_vehicle_instances": 1042,
+            "count_mae": 0.7979,
+            "count_wape": 0.1289,
+            "precision_iou50": 0.9319,
+            "recall_iou50": 0.8342,
+            "f1_iou50": 0.8803,
+            "tp": 971,
+            "fp": 71,
+            "fn": 193,
+            "reference_distinct_vehicles": 46,
+            "predicted_distinct_tracks": 46,
+            "distinct_count_absolute_error": 0,
+            "reference_crossings": 16,
+            "predicted_crossings": 16,
+            "crossing_absolute_error": 0,
+            "idtp": 903,
+            "idfp": 86,
+            "idfn": 261,
+            "identity_f1": 0.8388,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          },
+          {
+            "sequence": "MVI_39761",
+            "split": "validation",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 659,
+            "predicted_vehicle_instances": 791,
+            "count_mae": 0.766,
+            "count_wape": 0.2185,
+            "precision_iou50": 0.8167,
+            "recall_iou50": 0.9803,
+            "f1_iou50": 0.891,
+            "tp": 646,
+            "fp": 145,
+            "fn": 13,
+            "reference_distinct_vehicles": 15,
+            "predicted_distinct_tracks": 17,
+            "distinct_count_absolute_error": 2,
+            "reference_crossings": 9,
+            "predicted_crossings": 9,
+            "crossing_absolute_error": 0,
+            "idtp": 641,
+            "idfp": 134,
+            "idfn": 18,
+            "identity_f1": 0.894,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          },
+          {
+            "sequence": "MVI_63521",
+            "split": "validation",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 1173,
+            "predicted_vehicle_instances": 1043,
+            "count_mae": 0.8085,
+            "count_wape": 0.1296,
+            "precision_iou50": 0.9885,
+            "recall_iou50": 0.8789,
+            "f1_iou50": 0.9305,
+            "tp": 1031,
+            "fp": 12,
+            "fn": 142,
+            "reference_distinct_vehicles": 21,
+            "predicted_distinct_tracks": 20,
+            "distinct_count_absolute_error": 1,
+            "reference_crossings": 12,
+            "predicted_crossings": 12,
+            "crossing_absolute_error": 0,
+            "idtp": 1010,
+            "idfp": 10,
+            "idfn": 163,
+            "identity_f1": 0.9211,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          },
+          {
+            "sequence": "MVI_40141",
+            "split": "validation",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1095,
+            "predicted_vehicle_instances": 1312,
+            "count_mae": 1.5585,
+            "count_wape": 0.2676,
+            "precision_iou50": 0.782,
+            "recall_iou50": 0.937,
+            "f1_iou50": 0.8525,
+            "tp": 1026,
+            "fp": 286,
+            "fn": 69,
+            "reference_distinct_vehicles": 16,
+            "predicted_distinct_tracks": 19,
+            "distinct_count_absolute_error": 3,
+            "reference_crossings": 11,
+            "predicted_crossings": 11,
+            "crossing_absolute_error": 0,
+            "idtp": 1072,
+            "idfp": 269,
+            "idfn": 23,
+            "identity_f1": 0.8801,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 5
+          }
+        ]
+      },
+      {
+        "policy": {
+          "name": "sampled_recovery",
+          "step": 2,
+          "confidence": 0.1,
+          "new_track": 0.45,
+          "buffer": 60,
+          "min_hits": 3
+        },
+        "aggregate": {
+          "frames": 752,
+          "reference_vehicle_instances": 4091,
+          "predicted_vehicle_instances": 4188,
+          "count_mae": 0.9827,
+          "count_wape": 0.1806,
+          "precision_iou50": 0.8773,
+          "recall_iou50": 0.8981,
+          "f1_iou50": 0.8875,
+          "tp": 3674,
+          "fp": 514,
+          "fn": 417,
+          "reference_distinct_vehicles": 98,
+          "predicted_distinct_tracks": 100,
+          "distinct_count_absolute_error": 12,
+          "reference_crossings": 48,
+          "predicted_crossings": 48,
+          "crossing_absolute_error": 0,
+          "idtp": 3503,
+          "idfp": 556,
+          "idfn": 588,
+          "identity_f1": 0.8596
+        },
+        "scenes": [
+          {
+            "sequence": "MVI_41063",
+            "split": "validation",
+            "weather": "sunny",
+            "frames": 188,
+            "reference_vehicle_instances": 1164,
+            "predicted_vehicle_instances": 1042,
+            "count_mae": 0.7979,
+            "count_wape": 0.1289,
+            "precision_iou50": 0.9319,
+            "recall_iou50": 0.8342,
+            "f1_iou50": 0.8803,
+            "tp": 971,
+            "fp": 71,
+            "fn": 193,
+            "reference_distinct_vehicles": 46,
+            "predicted_distinct_tracks": 41,
+            "distinct_count_absolute_error": 5,
+            "reference_crossings": 16,
+            "predicted_crossings": 16,
+            "crossing_absolute_error": 0,
+            "idtp": 806,
+            "idfp": 92,
+            "idfn": 358,
+            "identity_f1": 0.7818,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          },
+          {
+            "sequence": "MVI_39761",
+            "split": "validation",
+            "weather": "night",
+            "frames": 188,
+            "reference_vehicle_instances": 659,
+            "predicted_vehicle_instances": 791,
+            "count_mae": 0.766,
+            "count_wape": 0.2185,
+            "precision_iou50": 0.8167,
+            "recall_iou50": 0.9803,
+            "f1_iou50": 0.891,
+            "tp": 646,
+            "fp": 145,
+            "fn": 13,
+            "reference_distinct_vehicles": 15,
+            "predicted_distinct_tracks": 17,
+            "distinct_count_absolute_error": 2,
+            "reference_crossings": 9,
+            "predicted_crossings": 9,
+            "crossing_absolute_error": 0,
+            "idtp": 641,
+            "idfp": 121,
+            "idfn": 18,
+            "identity_f1": 0.9022,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          },
+          {
+            "sequence": "MVI_63521",
+            "split": "validation",
+            "weather": "rainy",
+            "frames": 188,
+            "reference_vehicle_instances": 1173,
+            "predicted_vehicle_instances": 1043,
+            "count_mae": 0.8085,
+            "count_wape": 0.1296,
+            "precision_iou50": 0.9885,
+            "recall_iou50": 0.8789,
+            "f1_iou50": 0.9305,
+            "tp": 1031,
+            "fp": 12,
+            "fn": 142,
+            "reference_distinct_vehicles": 21,
+            "predicted_distinct_tracks": 21,
+            "distinct_count_absolute_error": 0,
+            "reference_crossings": 12,
+            "predicted_crossings": 12,
+            "crossing_absolute_error": 0,
+            "idtp": 979,
+            "idfp": 42,
+            "idfn": 194,
+            "identity_f1": 0.8924,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          },
+          {
+            "sequence": "MVI_40141",
+            "split": "validation",
+            "weather": "cloudy",
+            "frames": 188,
+            "reference_vehicle_instances": 1095,
+            "predicted_vehicle_instances": 1312,
+            "count_mae": 1.5585,
+            "count_wape": 0.2676,
+            "precision_iou50": 0.782,
+            "recall_iou50": 0.937,
+            "f1_iou50": 0.8525,
+            "tp": 1026,
+            "fp": 286,
+            "fn": 69,
+            "reference_distinct_vehicles": 16,
+            "predicted_distinct_tracks": 21,
+            "distinct_count_absolute_error": 5,
+            "reference_crossings": 11,
+            "predicted_crossings": 11,
+            "crossing_absolute_error": 0,
+            "idtp": 1077,
+            "idfp": 301,
+            "idfn": 18,
+            "identity_f1": 0.871,
+            "counting_line": [
+              [
+                0.05,
+                0.6
+              ],
+              [
+                0.95,
+                0.6
+              ]
+            ],
+            "counted_tracks_min_hits": 3
+          }
+        ]
+      }
+    ]
+  },
+  "results": {
+    "previous": {
+      "policy": {
+        "name": "previous_sampled",
+        "step": 2,
+        "confidence": 0.35,
+        "new_track": 0.25,
+        "buffer": 30,
+        "min_hits": 1
+      },
+      "aggregate": {
+        "frames": 752,
+        "reference_vehicle_instances": 8593,
+        "predicted_vehicle_instances": 8645,
+        "count_mae": 2.3484,
+        "count_wape": 0.2055,
+        "precision_iou50": 0.8175,
+        "recall_iou50": 0.8224,
+        "f1_iou50": 0.8199,
+        "tp": 7067,
+        "fp": 1578,
+        "fn": 1526,
+        "reference_distinct_vehicles": 105,
+        "predicted_distinct_tracks": 175,
+        "distinct_count_absolute_error": 70,
+        "reference_crossings": 26,
+        "predicted_crossings": 27,
+        "crossing_absolute_error": 1,
+        "idtp": 6418,
+        "idfp": 1937,
+        "idfn": 2175,
+        "identity_f1": 0.7574
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_39211",
+          "split": "test",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 709,
+          "predicted_vehicle_instances": 848,
+          "count_mae": 0.8138,
+          "count_wape": 0.2158,
+          "precision_iou50": 0.8184,
+          "recall_iou50": 0.9788,
+          "f1_iou50": 0.8915,
+          "tp": 694,
+          "fp": 154,
+          "fn": 15,
+          "reference_distinct_vehicles": 9,
+          "predicted_distinct_tracks": 12,
+          "distinct_count_absolute_error": 3,
+          "reference_crossings": 7,
+          "predicted_crossings": 7,
+          "crossing_absolute_error": 0,
+          "idtp": 693,
+          "idfp": 146,
+          "idfn": 16,
+          "identity_f1": 0.8953,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 1
+        },
+        {
+          "sequence": "MVI_40701",
+          "split": "test",
+          "weather": "cloudy",
+          "frames": 188,
+          "reference_vehicle_instances": 1840,
+          "predicted_vehicle_instances": 2351,
+          "count_mae": 2.9628,
+          "count_wape": 0.3027,
+          "precision_iou50": 0.7031,
+          "recall_iou50": 0.8984,
+          "f1_iou50": 0.7888,
+          "tp": 1653,
+          "fp": 698,
+          "fn": 187,
+          "reference_distinct_vehicles": 29,
+          "predicted_distinct_tracks": 52,
+          "distinct_count_absolute_error": 23,
+          "reference_crossings": 8,
+          "predicted_crossings": 8,
+          "crossing_absolute_error": 0,
+          "idtp": 1464,
+          "idfp": 802,
+          "idfn": 376,
+          "identity_f1": 0.7131,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 1
+        },
+        {
+          "sequence": "MVI_40864",
+          "split": "test",
+          "weather": "rainy",
+          "frames": 188,
+          "reference_vehicle_instances": 4798,
+          "predicted_vehicle_instances": 4016,
+          "count_mae": 4.4574,
+          "count_wape": 0.1747,
+          "precision_iou50": 0.8842,
+          "recall_iou50": 0.7401,
+          "f1_iou50": 0.8058,
+          "tp": 3551,
+          "fp": 465,
+          "fn": 1247,
+          "reference_distinct_vehicles": 42,
+          "predicted_distinct_tracks": 75,
+          "distinct_count_absolute_error": 33,
+          "reference_crossings": 4,
+          "predicted_crossings": 5,
+          "crossing_absolute_error": 1,
+          "idtp": 3141,
+          "idfp": 752,
+          "idfn": 1657,
+          "identity_f1": 0.7228,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 1
+        },
+        {
+          "sequence": "MVI_40743",
+          "split": "test",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 1246,
+          "predicted_vehicle_instances": 1430,
+          "count_mae": 1.1596,
+          "count_wape": 0.175,
+          "precision_iou50": 0.8175,
+          "recall_iou50": 0.9382,
+          "f1_iou50": 0.8737,
+          "tp": 1169,
+          "fp": 261,
+          "fn": 77,
+          "reference_distinct_vehicles": 25,
+          "predicted_distinct_tracks": 36,
+          "distinct_count_absolute_error": 11,
+          "reference_crossings": 7,
+          "predicted_crossings": 7,
+          "crossing_absolute_error": 0,
+          "idtp": 1120,
+          "idfp": 237,
+          "idfn": 126,
+          "identity_f1": 0.8605,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 1
+        }
+      ]
+    },
+    "selected": {
+      "policy": {
+        "name": "native_strict",
+        "step": 1,
+        "confidence": 0.1,
+        "new_track": 0.55,
+        "buffer": 90,
+        "min_hits": 5
+      },
+      "aggregate": {
+        "frames": 752,
+        "reference_vehicle_instances": 8593,
+        "predicted_vehicle_instances": 8645,
+        "count_mae": 2.3484,
+        "count_wape": 0.2055,
+        "precision_iou50": 0.8175,
+        "recall_iou50": 0.8224,
+        "f1_iou50": 0.8199,
+        "tp": 7067,
+        "fp": 1578,
+        "fn": 1526,
+        "reference_distinct_vehicles": 105,
+        "predicted_distinct_tracks": 153,
+        "distinct_count_absolute_error": 48,
+        "reference_crossings": 26,
+        "predicted_crossings": 28,
+        "crossing_absolute_error": 2,
+        "idtp": 6559,
+        "idfp": 2066,
+        "idfn": 2034,
+        "identity_f1": 0.7619
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_39211",
+          "split": "test",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 709,
+          "predicted_vehicle_instances": 848,
+          "count_mae": 0.8138,
+          "count_wape": 0.2158,
+          "precision_iou50": 0.8184,
+          "recall_iou50": 0.9788,
+          "f1_iou50": 0.8915,
+          "tp": 694,
+          "fp": 154,
+          "fn": 15,
+          "reference_distinct_vehicles": 9,
+          "predicted_distinct_tracks": 12,
+          "distinct_count_absolute_error": 3,
+          "reference_crossings": 7,
+          "predicted_crossings": 8,
+          "crossing_absolute_error": 1,
+          "idtp": 696,
+          "idfp": 303,
+          "idfn": 13,
+          "identity_f1": 0.815,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 5
+        },
+        {
+          "sequence": "MVI_40701",
+          "split": "test",
+          "weather": "cloudy",
+          "frames": 188,
+          "reference_vehicle_instances": 1840,
+          "predicted_vehicle_instances": 2351,
+          "count_mae": 2.9628,
+          "count_wape": 0.3027,
+          "precision_iou50": 0.7031,
+          "recall_iou50": 0.8984,
+          "f1_iou50": 0.7888,
+          "tp": 1653,
+          "fp": 698,
+          "fn": 187,
+          "reference_distinct_vehicles": 29,
+          "predicted_distinct_tracks": 47,
+          "distinct_count_absolute_error": 18,
+          "reference_crossings": 8,
+          "predicted_crossings": 8,
+          "crossing_absolute_error": 0,
+          "idtp": 1556,
+          "idfp": 788,
+          "idfn": 284,
+          "identity_f1": 0.7438,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 5
+        },
+        {
+          "sequence": "MVI_40864",
+          "split": "test",
+          "weather": "rainy",
+          "frames": 188,
+          "reference_vehicle_instances": 4798,
+          "predicted_vehicle_instances": 4016,
+          "count_mae": 4.4574,
+          "count_wape": 0.1747,
+          "precision_iou50": 0.8842,
+          "recall_iou50": 0.7401,
+          "f1_iou50": 0.8058,
+          "tp": 3551,
+          "fp": 465,
+          "fn": 1247,
+          "reference_distinct_vehicles": 42,
+          "predicted_distinct_tracks": 63,
+          "distinct_count_absolute_error": 21,
+          "reference_crossings": 4,
+          "predicted_crossings": 5,
+          "crossing_absolute_error": 1,
+          "idtp": 3158,
+          "idfp": 764,
+          "idfn": 1640,
+          "identity_f1": 0.7243,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 5
+        },
+        {
+          "sequence": "MVI_40743",
+          "split": "test",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 1246,
+          "predicted_vehicle_instances": 1430,
+          "count_mae": 1.1596,
+          "count_wape": 0.175,
+          "precision_iou50": 0.8175,
+          "recall_iou50": 0.9382,
+          "f1_iou50": 0.8737,
+          "tp": 1169,
+          "fp": 261,
+          "fn": 77,
+          "reference_distinct_vehicles": 25,
+          "predicted_distinct_tracks": 31,
+          "distinct_count_absolute_error": 6,
+          "reference_crossings": 7,
+          "predicted_crossings": 7,
+          "crossing_absolute_error": 0,
+          "idtp": 1149,
+          "idfp": 211,
+          "idfn": 97,
+          "identity_f1": 0.8818,
+          "counting_line": [
+            [
+              0.05,
+              0.6
+            ],
+            [
+              0.95,
+              0.6
+            ]
+          ],
+          "counted_tracks_min_hits": 5
+        }
+      ]
+    }
+  },
+  "acceptance": {
+    "passed": false,
+    "checks": {
+      "distinct_count_error_reduced": true,
+      "identity_f1_not_worse": true,
+      "line_error_not_worse": false,
+      "frame_count_error_preserved": true,
+      "detection_f1_preserved": true
+    }
+  },
+  "notice": "Confirmed track IDs remain estimates of distinct vehicles; identity switches and occlusion can still cause errors."
+}

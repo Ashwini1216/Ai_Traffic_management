@@ -50,7 +50,7 @@ ROUTE_CHECK_MIN_INTERVAL_S = 120
 BETTER_ROUTE_MIN_RISK = 10.0
 BETTER_ROUTE_MIN_SAVING_S = 300
 SAME_ROUTE_M = 120
-_route_checks: dict[str, datetime] = {}
+_route_checks: dict[str, tuple[datetime, str]] = {}
 
 
 def band(risk: float) -> str:
@@ -73,7 +73,7 @@ def notify(username: str, kind: str, title: str, message: str, evidence: dict, f
 
 
 def _trip_route(trip: dict) -> dict:
-    if trip.get("route_source") == "google_route" and trip.get("route_polyline"):
+    if trip.get("route_polyline"):
         coordinates = core.decode_google_polyline(trip["route_polyline"])
     else:
         coordinates = [[trip["origin_lon"], trip["origin_lat"]], [trip["destination_lon"], trip["destination_lat"]]]
@@ -335,15 +335,27 @@ def better_route(journey_id: str, payload: PositionInput, actor: str = Depends(c
         raise HTTPException(409, "This journey has ended.")
     if not core.in_bengaluru(payload.latitude, payload.longitude):
         raise HTTPException(422, "The position is outside the Bengaluru area.")
+    if payload.accuracy_m is not None and payload.accuracy_m > GPS_MAX_ACCURACY_M:
+        return {'better':False,'message':'Waiting for a more accurate location before comparing routes.'}
     now = datetime.now(timezone.utc)
     last = _route_checks.get(journey_id)
-    if last and (now - last).total_seconds() < ROUTE_CHECK_MIN_INTERVAL_S:
+    state = routing.revision()
+    if last and state == last[1] and (now - last[0]).total_seconds() < ROUTE_CHECK_MIN_INTERVAL_S:
         raise HTTPException(429, "Routes were checked moments ago. The next check is possible in two minutes.")
-    _route_checks[journey_id] = now
+    _route_checks[journey_id] = (now, state)
     current = json.loads(journey["route_json"])
     routes = routing.recommend((payload.latitude, payload.longitude), (journey["destination_lat"], journey["destination_lon"]),
                                None, advice=False)["routes"]
     best = routes[0]
+    # A detour can follow most of the old route. Geometry overlap must never
+    # suppress an offer when the accepted route has a verified closure ahead.
+    length = core.polyline_length_m(current)
+    along = core.locate_on_polyline(payload.latitude, payload.longitude, current)[1]
+    closures_ahead = [i for i in routing._incidents_on_route(current, now, 3600, length) if i['closure']
+                      and core.locate_on_polyline(i['latitude'], i['longitude'], current)[1] > along + AHEAD_MARGIN_M]
+    if closures_ahead and not best['restricted']:
+        return {'checked_at':now.isoformat(),'route':best,'better':True,
+                'message':'An alternative route avoids a verified road closure ahead. Review it before switching.'}
     yours = max(routes, key=lambda r: _follows(r["geometry"]["coordinates"], current))
     if _follows(yours["geometry"]["coordinates"], current) < 0.8:
         yours = None  # no candidate follows the planned route (for example, after leaving it)

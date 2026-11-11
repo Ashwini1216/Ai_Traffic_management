@@ -33,6 +33,8 @@ os.environ.update({
     "VIDEO_MAX_SAMPLED_FRAMES": "1500",
     # Real detector tests use the weights in the project's models/ folder and are skipped without them.
     "YOLO_WEIGHTS": str(ROOT / "models" / "yolov8n.pt"),
+    "YOLO_IMAGE_SIZE": "640", "YOLO_CONFIDENCE": "0.35", "YOLO_AGNOSTIC_NMS": "0", "YOLO_DEVICE": "cpu",
+    "YOLO_CLIP_TRACKING": "legacy",
 })
 sys.path[:0] = [str(HERE), str(ROOT / "backend")]
 

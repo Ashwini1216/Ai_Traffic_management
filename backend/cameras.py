@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path, PureWindowsPath
@@ -20,8 +21,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field, field_validator
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_validator
 
 import core
 import observations
@@ -54,6 +55,14 @@ class CameraInput(BaseModel):
     sample_seconds: int = Field(default=20, ge=5, le=120)
     counting_line: list[list[float]] | None = None
     roi: list[list[float]] | None = None
+    measurement_validated: bool = False
+    validation_note: str | None = Field(default=None,max_length=1000)
+
+    @model_validator(mode='after')
+    def _validated_counts(self):
+        if self.measurement_validated and len((self.validation_note or '').strip())<12:
+            raise ValueError('Describe the footage and manual count checks before marking measurements validated.')
+        return self
 
     @field_validator("stream_url")
     @classmethod
@@ -72,6 +81,7 @@ class CameraInput(BaseModel):
     def _line(cls, value):
         if value is not None and (len(value) != 2 or any(len(p) != 2 or not all(0 <= c <= 1 for c in p) for p in value)):
             raise ValueError("counting_line must be two [x, y] points between 0 and 1")
+        if value is not None and value[0]==value[1]:raise ValueError('Counting-line endpoints must be different.')
         return value
 
     @field_validator("roi")
@@ -94,7 +104,7 @@ def _camera_view(row: dict) -> dict:
 def cameras(actor: str = Depends(authority_token)):
     rows = store.rows("""SELECT camera_id,display_name,area,road,latitude,longitude,source_type,authorization_status,
       operational_status,last_success_at,stream_url,collection_interval_seconds,sample_seconds,counting_line_json,roi_json,
-      last_attempt_at,last_error,consecutive_failures,segment_id FROM cameras ORDER BY display_name""")
+      last_attempt_at,last_error,consecutive_failures,segment_id,measurement_validated,validation_note FROM cameras ORDER BY display_name""")
     return {"cameras": [_camera_view(row) for row in rows]}
 
 
@@ -125,6 +135,11 @@ def register_camera(payload: CameraInput, actor: str = Depends(authority_token))
         db.execute("INSERT INTO audit_log(action,entity_type,entity_id,actor,occurred_at,details_json) VALUES(?,?,?,?,?,?)",
                    ("camera_registry_update", "camera", payload.camera_id, actor, iso_now(),
                     payload.model_dump_json(exclude={"stream_url"})))
+        db.execute('UPDATE cameras SET measurement_validated=?,validation_note=? WHERE camera_id=?',
+                   (int(payload.measurement_validated),payload.validation_note,payload.camera_id))
+        if payload.operational_status=='online':
+            db.execute("UPDATE cameras SET consecutive_failures=0,last_error=NULL WHERE camera_id=? AND operational_status='online'",
+                       (payload.camera_id,))
     return {"camera_id": payload.camera_id, "authorization_status": payload.authorization_status,
             "operational_status": payload.operational_status, "has_stream": bool(stream_url)}
 
@@ -145,14 +160,25 @@ def collect(camera: dict) -> dict:
         end = datetime.now(timezone.utc)
         start = end - timedelta(seconds=max(1.0, result["duration_seconds"]))
         crossings = result["line_crossings"]
+        vehicle_count = (crossings if crossings is not None else
+                         result.get('peak_vehicles_in_frame', result['tracked_vehicles']) if result.get('low_refresh_rate') else
+                         result['tracked_vehicles'])
         stored = observations.store_observation({
             "observed_start": start.isoformat(), "observed_end": end.isoformat(),
             "area": camera["area"], "road": camera["road"], "source_type": "camera", "source_name": "camera_stream_collector",
             "camera_id": camera["camera_id"],
             # With a counting line, the count is vehicles crossing it, matching the flow figure.
-            "vehicle_count": crossings if crossings is not None else result["tracked_vehicles"],
+            "vehicle_count": vehicle_count,
             "flow_per_hour": result["flow_per_hour"], "occupancy": result["occupancy"], "queue_length": result["queue_length"],
         })
+        if result.get('measurement_flags'):
+            observation = store.one('SELECT quality_flags_json FROM traffic_observations WHERE id=?', (stored['id'],))
+            flags = list(dict.fromkeys([*json.loads(observation['quality_flags_json'] or '[]'), *result['measurement_flags']]))
+            store.execute('UPDATE traffic_observations SET quality_flags_json=? WHERE id=?', (json.dumps(flags), stored['id']))
+        if camera.get('measurement_validated') and not result.get('automatic_verification_blocked'):
+            observations.review_observation(stored['id'],observations.ObservationReview(
+                quality_status='verified',note='Validated camera configuration: '+(camera.get('validation_note') or '')),
+                actor='validated_camera:'+camera['camera_id'])
     except (ValueError, RuntimeError, OSError, HTTPException) as exc:
         message = exc.detail if isinstance(exc, HTTPException) else str(exc)
         failures = (camera.get("consecutive_failures") or 0) + 1
@@ -165,6 +191,34 @@ def collect(camera: dict) -> dict:
     with store.connect() as db:
         db.execute("UPDATE cameras SET last_error=NULL,consecutive_failures=0 WHERE camera_id=?", (camera["camera_id"],))
     return {"camera_id": camera["camera_id"], "ok": True, "observation_id": stored["id"], **result}
+
+
+_SNAPSHOTS = {}
+_SNAPSHOTS_LOCK = threading.Lock()
+
+
+@router.get('/api/cameras/{camera_id}/snapshot')
+def camera_snapshot(camera_id: str, actor: str = Depends(authority_token)):
+    camera = store.one('SELECT * FROM cameras WHERE camera_id=?', (camera_id,))
+    if not camera:
+        raise HTTPException(404, 'Camera not found.')
+    if camera['authorization_status'] != 'approved' or camera['operational_status'] != 'online' or not camera.get('stream_url'):
+        raise HTTPException(403, 'Only approved online stream cameras can be previewed.')
+    key = (camera_id, camera['stream_url'])
+    with _SNAPSHOTS_LOCK:
+        cached = _SNAPSHOTS.get(key)
+    if not cached or time.monotonic() - cached[0] > 5:
+        from camera_capture import snapshot
+        try:
+            content = snapshot(camera['stream_url'])
+        except (ValueError, RuntimeError, OSError) as exc:
+            raise HTTPException(503, 'The camera could not provide a current usable image. Try again shortly.') from exc
+        cached = (time.monotonic(), content, iso_now())
+        with _SNAPSHOTS_LOCK:
+            if len(_SNAPSHOTS) >= 32:
+                _SNAPSHOTS.pop(min(_SNAPSHOTS, key=lambda k: _SNAPSHOTS[k][0]))
+            _SNAPSHOTS[key] = cached
+    return Response(cached[1], media_type='image/jpeg', headers={'Cache-Control': 'no-store', 'X-Frame-Fetched-At': cached[2]})
 
 
 def collect_due(now: datetime | None = None) -> dict:
@@ -238,7 +292,8 @@ async def analyze_camera_video(camera_id: str, video: UploadFile = File(...),
         try:
             from vision import analyze_video
             # Analysis takes seconds to minutes; run it off the event loop so the API stays responsive.
-            analysis = await run_in_threadpool(analyze_video, pending_path)
+            roi=json.loads(camera['roi_json']) if camera.get('roi_json') else None
+            analysis = await run_in_threadpool(analyze_video, pending_path, **({'roi':roi} if roi else {}))
         except ImportError as exc:
             raise HTTPException(503, "Install the project dependencies from the root requirements.txt before using video analysis.") from exc
         except ValueError as exc:
@@ -248,7 +303,7 @@ async def analyze_camera_video(camera_id: str, video: UploadFile = File(...),
         pending_path.replace(stored_path)
         observation = observations.store_observation({
             "observed_date": observed_date, "time_block": time_block, "area": camera["area"], "road": camera["road"],
-            "traffic_volume": analysis["clip_vehicle_count_estimate"], "source_type": "camera",
+            "vehicle_count": analysis["clip_vehicle_count_estimate"], "source_type": "camera",
             "source_name": "yolov8n_video_count", "camera_id": camera_id,
         })
         with store.connect() as db:
@@ -328,6 +383,34 @@ def sample_analysis(job_id: str, actor: str = Depends(authority_token)):
         if not job or job["owner"] != actor:
             raise HTTPException(404, "This video analysis was not found. Results are kept for one hour.")
         return _sample_view(job)
+
+
+class ReferenceCounts(BaseModel):
+    expected: dict[str,StrictInt]
+    note: str = Field(min_length=12,max_length=1000)
+
+    @field_validator('expected')
+    @classmethod
+    def _counts(cls,value):
+        from count_validation import VEHICLE_CLASSES
+        if not value or set(value)-VEHICLE_CLASSES or any(v<0 or v>100000 for v in value.values()):
+            raise ValueError('Enter non-negative reference counts for car, motorcycle, bus or truck.')
+        return value
+
+
+@router.post('/api/video-samples/{job_id}/validate')
+def validate_video_counts(job_id: str,payload: ReferenceCounts,actor: str = Depends(authority_token)):
+    from count_validation import compare_counts
+    with _SAMPLES_LOCK:
+        job=_SAMPLES.get(job_id)
+        if not job or job['owner']!=actor:raise HTTPException(404,'Video analysis not found for this account.')
+        if job['status']!='done':raise HTTPException(409,'Wait until video analysis finishes before comparing counts.')
+        result=compare_counts(payload.expected,job['analysis'].get('vehicle_counts_by_class',{}))
+        job['validation']={**result,'review_note':payload.note,'reviewed_at':iso_now()}
+        directory=DATA_DIR/'count_validations';directory.mkdir(parents=True,exist_ok=True)
+        (directory/(job_id+'.json')).write_text(json.dumps({'job_id':job_id,'filename':job['filename'],
+            'analysis':{k:v for k,v in job['analysis'].items() if k!='preview_image'},'validation':job['validation']},indent=2))
+        return job['validation']
 
 
 @router.get("/api/camera-footage")

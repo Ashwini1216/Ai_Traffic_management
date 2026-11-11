@@ -1,0 +1,5 @@
+# Optional public-data acquisition and full-region road-graph construction.
+# Install after requirements.txt in the same project environment.
+requests>=2.32,<3
+gdown>=5,<6
+osmium>=4,<5

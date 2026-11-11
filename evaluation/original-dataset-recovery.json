@@ -1,0 +1,33 @@
+{
+  "restored_at": "2026-11-11T03:52:26.228193+00:00",
+  "block_archive": "bangalore_traffic_timely_dataset.zip",
+  "block_archive_sha256": "82b228ffa5bfd3c3f01dd8ac829c0d6d9b98301e2dd710ad0d7ba2b702314927",
+  "daily_archive_sha256": "09202e1aeaff512980a15009d18e328a5cd75d386a98df6ea150629776d68998",
+  "block_archive_bytes": 695179,
+  "valid_block_records": 33072,
+  "rejected_records": 0,
+  "roads": 16,
+  "areas": 8,
+  "date_range": [
+    "2023-01-01",
+    "2024-08-09"
+  ],
+  "labels": {
+    "High": 27280,
+    "Medium": 5244,
+    "Low": 548
+  },
+  "complete_six_block_days": 5512,
+  "matches_saved_project_facts": true,
+  "derived_daily_volume_shares_confirmed": true,
+  "volume_shares": {
+    "Midnight": 0.04,
+    "Morning": 0.08,
+    "Daytime": 0.26,
+    "Noon": 0.19,
+    "Evening": 0.28,
+    "Night": 0.15
+  },
+  "max_volume_rounding_error": 0.5,
+  "notice": "Original supplied project archive. Its six block volumes are rounded fixed shares of the public daily source; these are derived time blocks, not six independently measured CCTV/sensor intervals. Labels are unverified."
+}

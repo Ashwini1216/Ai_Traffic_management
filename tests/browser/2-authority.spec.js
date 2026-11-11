@@ -169,6 +169,15 @@ test('the models page shows the version, its checks, and a replay', async () => 
   await expect(page.locator('.form-card', { hasText: 'Replay on past records' }).locator('tbody tr')).toHaveCount(3);
 });
 
+test('the standalone forest has its own evaluation and readiness information', async () => {
+  await go(page, 'Models');
+  await expect(page.getByRole('heading',{name:'Data readiness'})).toBeVisible();
+  await page.locator('tbody tr').filter({hasText:/^rf-/}).first().click();
+  await expect(page.locator('.bar-label',{hasText:'Random Forest model'})).toHaveCount(1);
+  await expect(page.locator('.check-list')).not.toContainText('the LSTM adds value');
+  await expect(page.locator('body')).not.toContainText('NaN');
+});
+
 test('an access request is approved, then the new authority is revoked', async () => {
   await go(page, 'Access requests');
   await page.locator('tr', { hasText: applicant.name }).getByRole('button', { name: 'Approve' }).click();
@@ -213,6 +222,8 @@ test('camera settings are saved, and editing keeps coordinates and the stream', 
   await field(page, 'Operational status').locator('select').selectOption('online');
   await field(page, 'Stream address').locator('input').fill('rtsp://camera.example/stream');
   await field(page, 'Counting line').locator('input').fill('0.6');
+  await page.getByLabel('Counts checked against manually counted road footage').check();
+  await field(page, 'Camera validation note').locator('input').fill('Compared manual counts on representative road recordings.');
   const save = name => Promise.all([
     page.waitForResponse(r => r.url().endsWith('/api/cameras') && r.request().method() === 'POST' && r.ok()),
     page.getByRole('button', { name }).click(),
@@ -220,6 +231,7 @@ test('camera settings are saved, and editing keeps coordinates and the stream', 
   await save(/Save camera source/);
   await expect(page.locator('tr', { hasText: 'Silk Board east' })).toContainText('every 5 min · counting line');
   await field(page, 'Update an existing camera').locator('select').selectOption('cam-ui-01');
+  await expect(page.getByLabel('Counts checked against manually counted road footage')).toBeChecked();
   await save(/Save camera changes/);
   await field(page, 'Update an existing camera').locator('select').selectOption('cam-geo-01');
   await save(/Save camera changes/);
@@ -227,6 +239,20 @@ test('camera settings are saved, and editing keeps coordinates and the stream', 
   const geo = cameras.find(c => c.camera_id === 'cam-geo-01');
   expect([geo.latitude, geo.longitude]).toEqual([12.9719, 77.6412]);
   expect(cameras.find(c => c.camera_id === 'cam-ui-01').has_stream).toBe(true);
+  expect(cameras.find(c => c.camera_id === 'cam-ui-01').measurement_validated).toBe(1);
+});
+
+test('an approved camera preview refreshes through authenticated access and can be stopped', async () => {
+  await go(page, 'CCTV review');
+  const panel = page.getByRole('region', { name: 'Live camera preview' });
+  await panel.getByLabel('Camera to view').selectOption('cam-ui-01');
+  const request = page.waitForRequest(r => r.url().endsWith('/api/cameras/cam-ui-01/snapshot'));
+  await panel.getByRole('button', { name: 'Start live view' }).click();
+  expect((await request).headers().authorization).toMatch(/^Bearer /);
+  await expect(panel.getByRole('img')).toBeVisible();
+  await expect(panel.locator('figcaption')).toContainText('Refreshing every 10 seconds');
+  await panel.getByRole('button', { name: 'Stop live view' }).click();
+  await expect(panel.locator('figcaption')).toContainText('View stopped');
 });
 
 test('a video is counted for people and vehicles without registering a camera', async () => {
@@ -238,13 +264,23 @@ test('a video is counted for people and vehicles without registering a camera', 
   await expect(card.getByRole('progressbar', { name: 'Analysis progress' })).toBeVisible();
   await expect(card.locator('.stat-tile', { hasText: 'Most people at once' })).toContainText('4', { timeout: 20_000 });
   await expect(card.locator('.stat-tile', { hasText: 'Different people seen' })).toContainText('6');
-  await expect(card.locator('.stat-tile', { hasText: 'Vehicles seen' })).toContainText('2 cars · 1 bus');
+  await expect(card.locator('.stat-tile', { hasText: 'Vehicle tracks seen' })).toContainText('2 cars · 1 bus');
   await expect(card.locator('.video-preview img')).toBeVisible();
   await expect(card).toContainText('people hide behind each other');
 });
 
 test('the clip date defaults to the Bengaluru date', async () => {
   await expect(page.locator('.form-card', { hasText: 'Review a video clip' }).locator('input[type="date"]')).toHaveValue(istTomorrow);
+});
+
+test('manual reference counts show measured error after a video is analysed', async () => {
+  const card = page.locator('.video-check');
+  await field(card, 'Reference car count').locator('input').fill('3');
+  await field(card, 'Reference bus count').locator('input').fill('1');
+  await field(card, 'Review note').locator('input').fill('Manually checked every vehicle in the same complete clip.');
+  await card.getByRole('button', { name: 'Compare reference counts' }).click();
+  await expect(card.getByRole('status')).toContainText('Mean absolute count error: 0.5');
+  await expect(card.getByRole('status')).toContainText('precision');
 });
 
 test('the traffic data overview matches the API', async () => {

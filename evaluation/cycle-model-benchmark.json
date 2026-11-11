@@ -1,0 +1,1582 @@
+{
+  "version": "cycle-rf-20261111-040833",
+  "kind": "cycle_gradient_boosting",
+  "metrics": {
+    "task": "Next-block severity on the restored project archive, with same-date numeric cycle projections fitted on training days only.",
+    "classes": [
+      "Low",
+      "Medium",
+      "High"
+    ],
+    "sequence_length": 6,
+    "max_horizon_blocks": 3,
+    "time_granularity": "block",
+    "split": {
+      "method": "chronological target dates: 70% training / 15% validation / 15% test",
+      "train_before": "2024-02-16",
+      "test_from": "2024-05-14"
+    },
+    "test": {
+      "count": 3246,
+      "accuracy": 0.9295,
+      "macro_f1": 0.6357,
+      "per_class": {
+        "Low": {
+          "precision": 0.1346,
+          "recall": 0.1522,
+          "f1": 0.1429,
+          "support": 46
+        },
+        "Medium": {
+          "precision": 0.7003,
+          "recall": 0.9163,
+          "f1": 0.7939,
+          "support": 454
+        },
+        "High": {
+          "precision": 0.9977,
+          "recall": 0.9446,
+          "f1": 0.9704,
+          "support": 2746
+        }
+      },
+      "confusion_matrix": [
+        [
+          7,
+          38,
+          1
+        ],
+        [
+          33,
+          416,
+          5
+        ],
+        [
+          12,
+          140,
+          2594
+        ]
+      ]
+    },
+    "validation": {
+      "count": 3180,
+      "accuracy": 0.9302,
+      "macro_f1": 0.663,
+      "per_class": {
+        "Low": {
+          "precision": 0.2037,
+          "recall": 0.2619,
+          "f1": 0.2292,
+          "support": 42
+        },
+        "Medium": {
+          "precision": 0.6998,
+          "recall": 0.9078,
+          "f1": 0.7904,
+          "support": 434
+        },
+        "High": {
+          "precision": 0.9961,
+          "recall": 0.9442,
+          "f1": 0.9694,
+          "support": 2704
+        }
+      },
+      "confusion_matrix": [
+        [
+          11,
+          30,
+          1
+        ],
+        [
+          31,
+          394,
+          9
+        ],
+        [
+          12,
+          139,
+          2553
+        ]
+      ]
+    },
+    "within_date_test": {
+      "count": 2705,
+      "accuracy": 1.0,
+      "macro_f1": 1.0,
+      "per_class": {
+        "Low": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 2
+        },
+        "Medium": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 130
+        },
+        "High": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 2573
+        }
+      },
+      "confusion_matrix": [
+        [
+          2,
+          0,
+          0
+        ],
+        [
+          0,
+          130,
+          0
+        ],
+        [
+          0,
+          0,
+          2573
+        ]
+      ]
+    },
+    "next_date_test": {
+      "count": 541,
+      "accuracy": 0.5767,
+      "macro_f1": 0.3474,
+      "per_class": {
+        "Low": {
+          "precision": 0.1,
+          "recall": 0.1136,
+          "f1": 0.1064,
+          "support": 44
+        },
+        "Medium": {
+          "precision": 0.6164,
+          "recall": 0.8827,
+          "f1": 0.7259,
+          "support": 324
+        },
+        "High": {
+          "precision": 0.7778,
+          "recall": 0.1214,
+          "f1": 0.21,
+          "support": 173
+        }
+      },
+      "confusion_matrix": [
+        [
+          5,
+          38,
+          1
+        ],
+        [
+          33,
+          286,
+          5
+        ],
+        [
+          12,
+          140,
+          21
+        ]
+      ]
+    },
+    "baselines_test": {
+      "majority": {
+        "count": 3246,
+        "accuracy": 0.846,
+        "macro_f1": 0.3055,
+        "per_class": {
+          "Low": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 46
+          },
+          "Medium": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 454
+          },
+          "High": {
+            "precision": 0.846,
+            "recall": 1.0,
+            "f1": 0.9166,
+            "support": 2746
+          }
+        },
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            46
+          ],
+          [
+            0,
+            0,
+            454
+          ],
+          [
+            0,
+            0,
+            2746
+          ]
+        ]
+      },
+      "persistence": {
+        "count": 3246,
+        "accuracy": 0.7575,
+        "macro_f1": 0.3642,
+        "per_class": {
+          "Low": {
+            "precision": 0.0435,
+            "recall": 0.0435,
+            "f1": 0.0435,
+            "support": 46
+          },
+          "Medium": {
+            "precision": 0.1842,
+            "recall": 0.185,
+            "f1": 0.1846,
+            "support": 454
+          },
+          "High": {
+            "precision": 0.8648,
+            "recall": 0.8642,
+            "f1": 0.8645,
+            "support": 2746
+          }
+        },
+        "confusion_matrix": [
+          [
+            2,
+            1,
+            43
+          ],
+          [
+            42,
+            84,
+            328
+          ],
+          [
+            2,
+            371,
+            2373
+          ]
+        ]
+      },
+      "historical_profile": {
+        "count": 3246,
+        "accuracy": 0.8894,
+        "macro_f1": 0.6039,
+        "per_class": {
+          "Low": {
+            "precision": 0.3333,
+            "recall": 0.1522,
+            "f1": 0.209,
+            "support": 46
+          },
+          "Medium": {
+            "precision": 0.579,
+            "recall": 0.7665,
+            "f1": 0.6597,
+            "support": 454
+          },
+          "High": {
+            "precision": 0.9649,
+            "recall": 0.9221,
+            "f1": 0.943,
+            "support": 2746
+          }
+        },
+        "confusion_matrix": [
+          [
+            7,
+            39,
+            0
+          ],
+          [
+            14,
+            348,
+            92
+          ],
+          [
+            0,
+            214,
+            2532
+          ]
+        ]
+      },
+      "previous_random_forest": {
+        "count": 3246,
+        "accuracy": 0.9341,
+        "macro_f1": 0.6321,
+        "per_class": {
+          "Low": {
+            "precision": 0.1351,
+            "recall": 0.1087,
+            "f1": 0.1205,
+            "support": 46
+          },
+          "Medium": {
+            "precision": 0.7208,
+            "recall": 0.9097,
+            "f1": 0.8043,
+            "support": 454
+          },
+          "High": {
+            "precision": 0.9917,
+            "recall": 0.9519,
+            "f1": 0.9714,
+            "support": 2746
+          }
+        },
+        "confusion_matrix": [
+          [
+            5,
+            39,
+            2
+          ],
+          [
+            21,
+            413,
+            20
+          ],
+          [
+            11,
+            121,
+            2614
+          ]
+        ]
+      }
+    },
+    "baselines_validation": {
+      "majority": {
+        "count": 3180,
+        "accuracy": 0.8503,
+        "macro_f1": 0.3064,
+        "per_class": {
+          "Low": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 42
+          },
+          "Medium": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 434
+          },
+          "High": {
+            "precision": 0.8503,
+            "recall": 1.0,
+            "f1": 0.9191,
+            "support": 2704
+          }
+        },
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            42
+          ],
+          [
+            0,
+            0,
+            434
+          ],
+          [
+            0,
+            0,
+            2704
+          ]
+        ]
+      },
+      "persistence": {
+        "count": 3180,
+        "accuracy": 0.7597,
+        "macro_f1": 0.3664,
+        "per_class": {
+          "Low": {
+            "precision": 0.0714,
+            "recall": 0.0714,
+            "f1": 0.0714,
+            "support": 42
+          },
+          "Medium": {
+            "precision": 0.162,
+            "recall": 0.1613,
+            "f1": 0.1617,
+            "support": 434
+          },
+          "High": {
+            "precision": 0.8659,
+            "recall": 0.8665,
+            "f1": 0.8662,
+            "support": 2704
+          }
+        },
+        "confusion_matrix": [
+          [
+            3,
+            2,
+            37
+          ],
+          [
+            38,
+            70,
+            326
+          ],
+          [
+            1,
+            360,
+            2343
+          ]
+        ]
+      },
+      "historical_profile": {
+        "count": 3180,
+        "accuracy": 0.8871,
+        "macro_f1": 0.6312,
+        "per_class": {
+          "Low": {
+            "precision": 0.2955,
+            "recall": 0.3095,
+            "f1": 0.3023,
+            "support": 42
+          },
+          "Medium": {
+            "precision": 0.5651,
+            "recall": 0.7604,
+            "f1": 0.6483,
+            "support": 434
+          },
+          "High": {
+            "precision": 0.971,
+            "recall": 0.9164,
+            "f1": 0.9429,
+            "support": 2704
+          }
+        },
+        "confusion_matrix": [
+          [
+            13,
+            29,
+            0
+          ],
+          [
+            30,
+            330,
+            74
+          ],
+          [
+            1,
+            225,
+            2478
+          ]
+        ]
+      },
+      "previous_random_forest": {
+        "count": 3180,
+        "accuracy": 0.9352,
+        "macro_f1": 0.6622,
+        "per_class": {
+          "Low": {
+            "precision": 0.1961,
+            "recall": 0.2381,
+            "f1": 0.2151,
+            "support": 42
+          },
+          "Medium": {
+            "precision": 0.7287,
+            "recall": 0.8848,
+            "f1": 0.7992,
+            "support": 434
+          },
+          "High": {
+            "precision": 0.9915,
+            "recall": 0.9541,
+            "f1": 0.9725,
+            "support": 2704
+          }
+        },
+        "confusion_matrix": [
+          [
+            10,
+            32,
+            0
+          ],
+          [
+            28,
+            384,
+            22
+          ],
+          [
+            13,
+            111,
+            2580
+          ]
+        ]
+      }
+    },
+    "horizons_test": {
+      "1": {
+        "count": 3246,
+        "accuracy": 0.9295,
+        "macro_f1": 0.6357,
+        "per_class": {
+          "Low": {
+            "precision": 0.1346,
+            "recall": 0.1522,
+            "f1": 0.1429,
+            "support": 46
+          },
+          "Medium": {
+            "precision": 0.7003,
+            "recall": 0.9163,
+            "f1": 0.7939,
+            "support": 454
+          },
+          "High": {
+            "precision": 0.9977,
+            "recall": 0.9446,
+            "f1": 0.9704,
+            "support": 2746
+          }
+        },
+        "confusion_matrix": [
+          [
+            7,
+            38,
+            1
+          ],
+          [
+            33,
+            416,
+            5
+          ],
+          [
+            12,
+            140,
+            2594
+          ]
+        ]
+      },
+      "2": {
+        "count": 3087,
+        "accuracy": 0.9184,
+        "macro_f1": 0.5482,
+        "per_class": {
+          "Low": {
+            "precision": 0.3333,
+            "recall": 0.0357,
+            "f1": 0.0645,
+            "support": 28
+          },
+          "Medium": {
+            "precision": 0.6928,
+            "recall": 0.5639,
+            "f1": 0.6217,
+            "support": 360
+          },
+          "High": {
+            "precision": 0.9427,
+            "recall": 0.9748,
+            "f1": 0.9585,
+            "support": 2699
+          }
+        },
+        "confusion_matrix": [
+          [
+            1,
+            22,
+            5
+          ],
+          [
+            2,
+            203,
+            155
+          ],
+          [
+            0,
+            68,
+            2631
+          ]
+        ]
+      },
+      "3": {
+        "count": 2928,
+        "accuracy": 0.929,
+        "macro_f1": 0.5394,
+        "per_class": {
+          "Low": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 26
+          },
+          "Medium": {
+            "precision": 0.718,
+            "recall": 0.5987,
+            "f1": 0.653,
+            "support": 319
+          },
+          "High": {
+            "precision": 0.9515,
+            "recall": 0.9791,
+            "f1": 0.9651,
+            "support": 2583
+          }
+        },
+        "confusion_matrix": [
+          [
+            0,
+            22,
+            4
+          ],
+          [
+            3,
+            191,
+            125
+          ],
+          [
+            1,
+            53,
+            2529
+          ]
+        ]
+      }
+    },
+    "lstm_regression_test": {},
+    "breakdowns_test": {
+      "time_block": {
+        "Daytime": {
+          "count": 541,
+          "accuracy": 1.0,
+          "macro_f1": 0.3333
+        },
+        "Evening": {
+          "count": 541,
+          "accuracy": 1.0,
+          "macro_f1": 0.3333
+        },
+        "Midnight": {
+          "count": 541,
+          "accuracy": 0.5767,
+          "macro_f1": 0.3474
+        },
+        "Morning": {
+          "count": 541,
+          "accuracy": 1.0,
+          "macro_f1": 1.0
+        },
+        "Night": {
+          "count": 541,
+          "accuracy": 1.0,
+          "macro_f1": 0.6667
+        },
+        "Noon": {
+          "count": 541,
+          "accuracy": 1.0,
+          "macro_f1": 0.6667
+        }
+      },
+      "day_type": {
+        "weekday": {
+          "count": 2340,
+          "accuracy": 0.9308,
+          "macro_f1": 0.6454
+        },
+        "weekend": {
+          "count": 906,
+          "accuracy": 0.926,
+          "macro_f1": 0.6096
+        }
+      },
+      "weather": {
+        "dry": {
+          "count": 2964,
+          "accuracy": 0.9288,
+          "macro_f1": 0.6382
+        },
+        "wet": {
+          "count": 282,
+          "accuracy": 0.9362,
+          "macro_f1": 0.6057
+        }
+      },
+      "area": {
+        "Electronic City": {
+          "count": 102,
+          "accuracy": 0.9216,
+          "macro_f1": 0.7582
+        },
+        "Hebbal": {
+          "count": 276,
+          "accuracy": 0.9348,
+          "macro_f1": 0.6567
+        },
+        "Indiranagar": {
+          "count": 882,
+          "accuracy": 0.9206,
+          "macro_f1": 0.5964
+        },
+        "Jayanagar": {
+          "count": 432,
+          "accuracy": 0.9468,
+          "macro_f1": 0.6819
+        },
+        "Koramangala": {
+          "count": 486,
+          "accuracy": 0.9095,
+          "macro_f1": 0.5167
+        },
+        "M.G. Road": {
+          "count": 684,
+          "accuracy": 0.9284,
+          "macro_f1": 0.57
+        },
+        "Whitefield": {
+          "count": 258,
+          "accuracy": 0.9651,
+          "macro_f1": 0.6402
+        },
+        "Yeshwanthpur": {
+          "count": 126,
+          "accuracy": 0.9365,
+          "macro_f1": 0.6237
+        }
+      }
+    },
+    "transfer_validation": {
+      "enabled": true,
+      "count": 4980,
+      "roads_evaluated": 16,
+      "macro_f1": 0.5253,
+      "accuracy": 0.8787,
+      "majority_baseline_macro_f1": 0.3013,
+      "required_gain": 0.02,
+      "per_road": {
+        "electronic-city--hosur-road-29c7e5": {
+          "count": 192,
+          "accuracy": 0.7656
+        },
+        "electronic-city--silk-board-junction-f3d434": {
+          "count": 144,
+          "accuracy": 0.8194
+        },
+        "hebbal--ballari-road-f531d4": {
+          "count": 228,
+          "accuracy": 0.807
+        },
+        "hebbal--hebbal-flyover-2a4396": {
+          "count": 294,
+          "accuracy": 0.8878
+        },
+        "indiranagar--100-feet-road-303336": {
+          "count": 486,
+          "accuracy": 0.9115
+        },
+        "indiranagar--cmh-road-2c76cc": {
+          "count": 480,
+          "accuracy": 0.9125
+        },
+        "jayanagar--jayanagar-4th-block-c06df9": {
+          "count": 312,
+          "accuracy": 0.8878
+        },
+        "jayanagar--south-end-circle-c9183b": {
+          "count": 336,
+          "accuracy": 0.9077
+        },
+        "koramangala--sarjapur-road-604b94": {
+          "count": 366,
+          "accuracy": 0.877
+        },
+        "koramangala--sony-world-junction-012f38": {
+          "count": 354,
+          "accuracy": 0.8729
+        },
+        "mg-road--anil-kumble-circle-395acc": {
+          "count": 438,
+          "accuracy": 0.9201
+        },
+        "mg-road--trinity-circle-52cac6": {
+          "count": 408,
+          "accuracy": 0.8799
+        },
+        "whitefield--itpl-main-road-a385c8": {
+          "count": 258,
+          "accuracy": 0.8333
+        },
+        "whitefield--marathahalli-bridge-6f727f": {
+          "count": 282,
+          "accuracy": 0.9078
+        },
+        "yeshwanthpur--tumkur-road-9532b6": {
+          "count": 234,
+          "accuracy": 0.8504
+        },
+        "yeshwanthpur--yeshwanthpur-circle-90d1a7": {
+          "count": 168,
+          "accuracy": 0.8393
+        }
+      },
+      "reason": "Transfer beat the majority baseline on held-out roads."
+    },
+    "active_model_comparison": null,
+    "experiment": {
+      "seed": 42,
+      "libraries": {
+        "numpy": "2.3.5",
+        "pandas": "2.2.3",
+        "scikit-learn": "1.9.1",
+        "tensorflow": "2.21.0"
+      },
+      "selection_period": "validation only",
+      "selected_family": "cycle_gradient_boosting",
+      "search": {
+        "selected_settings": {
+          "min_samples_leaf": 1,
+          "max_features": 1.0
+        },
+        "trials": [
+          {
+            "settings": {
+              "min_samples_leaf": 1,
+              "max_features": 1.0
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9333,
+              "macro_f1": 0.6541,
+              "per_class": {
+                "Low": {
+                  "precision": 0.2105,
+                  "recall": 0.1905,
+                  "f1": 0.2,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7186,
+                  "recall": 0.8825,
+                  "f1": 0.7921,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9877,
+                  "recall": 0.953,
+                  "f1": 0.9701,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  8,
+                  33,
+                  1
+                ],
+                [
+                  20,
+                  383,
+                  31
+                ],
+                [
+                  10,
+                  117,
+                  2577
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 6.0,
+              "Medium": 2.0
+            }
+          },
+          {
+            "settings": {
+              "min_samples_leaf": 2,
+              "max_features": 1.0
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.934,
+              "macro_f1": 0.653,
+              "per_class": {
+                "Low": {
+                  "precision": 0.1905,
+                  "recall": 0.1905,
+                  "f1": 0.1905,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.714,
+                  "recall": 0.9032,
+                  "f1": 0.7976,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9927,
+                  "recall": 0.9504,
+                  "f1": 0.9711,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  8,
+                  34,
+                  0
+                ],
+                [
+                  23,
+                  392,
+                  19
+                ],
+                [
+                  11,
+                  123,
+                  2570
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 4.0,
+              "Medium": 1.5
+            }
+          },
+          {
+            "settings": {
+              "min_samples_leaf": 4,
+              "max_features": 0.75
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9349,
+              "macro_f1": 0.6538,
+              "per_class": {
+                "Low": {
+                  "precision": 0.1765,
+                  "recall": 0.2143,
+                  "f1": 0.1935,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7311,
+                  "recall": 0.871,
+                  "f1": 0.795,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.99,
+                  "recall": 0.9564,
+                  "f1": 0.9729,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  9,
+                  33,
+                  0
+                ],
+                [
+                  30,
+                  378,
+                  26
+                ],
+                [
+                  12,
+                  106,
+                  2586
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 1.5,
+              "Medium": 0.75
+            }
+          },
+          {
+            "settings": {
+              "min_samples_leaf": 2,
+              "max_features": "sqrt"
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.934,
+              "macro_f1": 0.6374,
+              "per_class": {
+                "Low": {
+                  "precision": 0.1852,
+                  "recall": 0.119,
+                  "f1": 0.1449,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7037,
+                  "recall": 0.9194,
+                  "f1": 0.7972,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9923,
+                  "recall": 0.949,
+                  "f1": 0.9701,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  5,
+                  36,
+                  1
+                ],
+                [
+                  16,
+                  399,
+                  19
+                ],
+                [
+                  6,
+                  132,
+                  2566
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 2.0,
+              "Medium": 1.0
+            }
+          }
+        ],
+        "selection_period": "validation only",
+        "family_trials": [
+          {
+            "family": "random_forest",
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9333,
+              "macro_f1": 0.6541,
+              "per_class": {
+                "Low": {
+                  "precision": 0.2105,
+                  "recall": 0.1905,
+                  "f1": 0.2,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7186,
+                  "recall": 0.8825,
+                  "f1": 0.7921,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9877,
+                  "recall": 0.953,
+                  "f1": 0.9701,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  8,
+                  33,
+                  1
+                ],
+                [
+                  20,
+                  383,
+                  31
+                ],
+                [
+                  10,
+                  117,
+                  2577
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 6.0,
+              "Medium": 2.0
+            }
+          },
+          {
+            "family": "hist_gradient_balanced_15",
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9302,
+              "macro_f1": 0.663,
+              "per_class": {
+                "Low": {
+                  "precision": 0.2037,
+                  "recall": 0.2619,
+                  "f1": 0.2292,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.6998,
+                  "recall": 0.9078,
+                  "f1": 0.7904,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9961,
+                  "recall": 0.9442,
+                  "f1": 0.9694,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  11,
+                  30,
+                  1
+                ],
+                [
+                  31,
+                  394,
+                  9
+                ],
+                [
+                  12,
+                  139,
+                  2553
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 0.5,
+              "Medium": 0.5
+            }
+          },
+          {
+            "family": "hist_gradient_balanced_31",
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9286,
+              "macro_f1": 0.6357,
+              "per_class": {
+                "Low": {
+                  "precision": 0.125,
+                  "recall": 0.1905,
+                  "f1": 0.1509,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7079,
+                  "recall": 0.8825,
+                  "f1": 0.7856,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.995,
+                  "recall": 0.9475,
+                  "f1": 0.9706,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  8,
+                  32,
+                  2
+                ],
+                [
+                  40,
+                  383,
+                  11
+                ],
+                [
+                  16,
+                  126,
+                  2562
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 4.0,
+              "Medium": 1.0
+            }
+          },
+          {
+            "family": "hist_gradient_unweighted",
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.934,
+              "macro_f1": 0.6372,
+              "per_class": {
+                "Low": {
+                  "precision": 0.1458,
+                  "recall": 0.1667,
+                  "f1": 0.1556,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7398,
+                  "recall": 0.8318,
+                  "f1": 0.7831,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9841,
+                  "recall": 0.9623,
+                  "f1": 0.9731,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  7,
+                  33,
+                  2
+                ],
+                [
+                  33,
+                  361,
+                  40
+                ],
+                [
+                  8,
+                  94,
+                  2602
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 4.0,
+              "Medium": 1.0
+            }
+          },
+          {
+            "family": "logistic_regularized",
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.884,
+              "macro_f1": 0.6065,
+              "per_class": {
+                "Low": {
+                  "precision": 0.4167,
+                  "recall": 0.119,
+                  "f1": 0.1852,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.5412,
+                  "recall": 0.9839,
+                  "f1": 0.6983,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 1.0,
+                  "recall": 0.8798,
+                  "f1": 0.9361,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  5,
+                  37,
+                  0
+                ],
+                [
+                  7,
+                  427,
+                  0
+                ],
+                [
+                  0,
+                  325,
+                  2379
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 0.5,
+              "Medium": 3.0
+            }
+          }
+        ]
+      },
+      "previous_feature_search": {
+        "selected_settings": {
+          "min_samples_leaf": 4,
+          "max_features": 0.5
+        },
+        "trials": [
+          {
+            "settings": {
+              "min_samples_leaf": 2,
+              "max_features": "sqrt"
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9283,
+              "macro_f1": 0.6504,
+              "per_class": {
+                "Low": {
+                  "precision": 0.1622,
+                  "recall": 0.2857,
+                  "f1": 0.2069,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7197,
+                  "recall": 0.8341,
+                  "f1": 0.7727,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9904,
+                  "recall": 0.9534,
+                  "f1": 0.9715,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  12,
+                  30,
+                  0
+                ],
+                [
+                  47,
+                  362,
+                  25
+                ],
+                [
+                  15,
+                  111,
+                  2578
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 3.0,
+              "Medium": 1.0
+            }
+          },
+          {
+            "settings": {
+              "min_samples_leaf": 4,
+              "max_features": 0.5
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9352,
+              "macro_f1": 0.6622,
+              "per_class": {
+                "Low": {
+                  "precision": 0.1961,
+                  "recall": 0.2381,
+                  "f1": 0.2151,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7287,
+                  "recall": 0.8848,
+                  "f1": 0.7992,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9915,
+                  "recall": 0.9541,
+                  "f1": 0.9725,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  10,
+                  32,
+                  0
+                ],
+                [
+                  28,
+                  384,
+                  22
+                ],
+                [
+                  13,
+                  111,
+                  2580
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 1.5,
+              "Medium": 0.75
+            }
+          },
+          {
+            "settings": {
+              "min_samples_leaf": 1,
+              "max_features": 0.75
+            },
+            "validation": {
+              "count": 3180,
+              "accuracy": 0.9327,
+              "macro_f1": 0.6525,
+              "per_class": {
+                "Low": {
+                  "precision": 0.2051,
+                  "recall": 0.1905,
+                  "f1": 0.1975,
+                  "support": 42
+                },
+                "Medium": {
+                  "precision": 0.7167,
+                  "recall": 0.8802,
+                  "f1": 0.7901,
+                  "support": 434
+                },
+                "High": {
+                  "precision": 0.9877,
+                  "recall": 0.9527,
+                  "f1": 0.9699,
+                  "support": 2704
+                }
+              },
+              "confusion_matrix": [
+                [
+                  8,
+                  33,
+                  1
+                ],
+                [
+                  21,
+                  382,
+                  31
+                ],
+                [
+                  10,
+                  118,
+                  2576
+                ]
+              ]
+            },
+            "decision_weights": {
+              "High": 1.0,
+              "Low": 6.0,
+              "Medium": 2.0
+            }
+          }
+        ],
+        "selection_period": "validation only"
+      },
+      "cycle_scales": {
+        "traffic_volume": {
+          "Midnight": 0.24,
+          "Morning": 0.48,
+          "Daytime": 1.5599999999999998,
+          "Noon": 1.1400000000000001,
+          "Evening": 1.68,
+          "Night": 0.9
+        },
+        "average_speed": {
+          "Midnight": 1.1009174311926604,
+          "Morning": 0.8807339449541284,
+          "Daytime": 0.9908256880733944,
+          "Noon": 1.1009174311926604,
+          "Evening": 0.8256880733944953,
+          "Night": 1.1009174311926604
+        },
+        "travel_time_index": {
+          "Midnight": 0.8963414634146342,
+          "Morning": 1.1202263083451203,
+          "Daytime": 0.9958847736625513,
+          "Noon": 0.8963414634146342,
+          "Evening": 1.1950207468879668,
+          "Night": 0.8963414634146342
+        },
+        "_roads": [
+          "electronic-city--hosur-road-29c7e5",
+          "electronic-city--silk-board-junction-f3d434",
+          "hebbal--ballari-road-f531d4",
+          "hebbal--hebbal-flyover-2a4396",
+          "indiranagar--100-feet-road-303336",
+          "indiranagar--cmh-road-2c76cc",
+          "jayanagar--jayanagar-4th-block-c06df9",
+          "jayanagar--south-end-circle-c9183b",
+          "koramangala--sarjapur-road-604b94",
+          "koramangala--sony-world-junction-012f38",
+          "mg-road--anil-kumble-circle-395acc",
+          "mg-road--trinity-circle-52cac6",
+          "whitefield--itpl-main-road-a385c8",
+          "whitefield--marathahalli-bridge-6f727f",
+          "yeshwanthpur--tumkur-road-9532b6",
+          "yeshwanthpur--yeshwanthpur-circle-90d1a7"
+        ]
+      },
+      "preprocessing": "Cycle scales fitted on complete training road-days. Training profiles see earlier labels only. Cross-date projections are absent."
+    },
+    "caveat": "Historical re-evaluation: this source/test era was already examined in the project and earlier experiments. The source derives six blocks from daily values. Scores do not validate six independently measured traffic intervals or current Bengaluru forecasts.",
+    "training_seconds": 37.0
+  },
+  "acceptance": {
+    "passed": false,
+    "rules": {
+      "min_macro_f1_gain_over_best_baseline": 0.02,
+      "lstm_must_beat_rf_without_lstm": true,
+      "accuracy_at_least_majority_baseline": true,
+      "every_class_recalled_when_support_at_least": 5,
+      "max_macro_f1_drop_vs_active_model": 0.01
+    },
+    "checks": [
+      {
+        "check": "macro-F1 beats the best baseline (previous_random_forest) by at least 0.02",
+        "passed": false,
+        "value": 0.6357,
+        "threshold": 0.6521
+      },
+      {
+        "check": "accuracy is at least the majority-class baseline",
+        "passed": true,
+        "value": 0.9295,
+        "threshold": 0.846
+      },
+      {
+        "check": "every class with at least 5 test records is predicted correctly at least once",
+        "passed": true,
+        "value": "all classes recalled"
+      }
+    ]
+  },
+  "data": {
+    "block_records": 33072,
+    "roads": 16,
+    "date_range": [
+      "2023-01-01",
+      "2024-08-09"
+    ],
+    "sources": {
+      "historical_dataset": 33072
+    },
+    "verified_records": 0,
+    "sequences": {
+      "train": 15228,
+      "validation": 3180,
+      "test": 3246
+    },
+    "rf_training_rows": 15228,
+    "time_granularity": "block",
+    "sha256": "9544e7f814eb3df767edb99fa29575a29ce761cd2fbbae25fdf60e5ed8a11ab2"
+  }
+}

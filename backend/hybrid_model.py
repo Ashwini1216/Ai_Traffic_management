@@ -102,6 +102,31 @@ def slot_date_block(slot: int) -> tuple[date, str]:
     return date.fromordinal(slot // len(TIME_BLOCKS)), TIME_BLOCKS[slot % len(TIME_BLOCKS)]
 
 
+def date_block_for_slot(slot: int, granularity='block'):
+    return (date.fromordinal(slot), 'Daily') if granularity == 'day' else slot_date_block(slot)
+
+
+def load_daily_history() -> pd.DataFrame:
+    """Actual daily records have ordinal-day slots; never six invented block rows."""
+    rows = store.rows('''SELECT o.*,s.road_type,s.zone_id FROM traffic_observations o
+      LEFT JOIN road_segments s ON s.segment_id=o.segment_id WHERE o.time_block='Daily'
+      AND o.quality_status<>'rejected' AND (o.source_type='public_daily_dataset' OR o.quality_status='verified')''')
+    if not rows:
+        return pd.DataFrame()
+    frame = pd.DataFrame(rows)
+    frame['date'] = frame['observed_date'].map(date.fromisoformat)
+    frame['slot'] = frame['date'].map(date.toordinal)
+    frame['trust'] = (frame.quality_status == 'verified').astype(int)
+    frame = frame.sort_values(['trust','ingested_at']).drop_duplicates(['segment_id','slot'],keep='last')
+    frame['wet'] = [wet_flag(w,p) for w,p in zip(frame.weather,frame.precipitation_mm)]
+    frame['roadwork_flag'] = frame.roadwork.map(roadwork_flag)
+    frame['label'] = frame.congestion_level.where(frame.congestion_level.notna(),None)
+    frame['road_type'] = frame.road_type.fillna('unknown')
+    for column in STEP_NUMERIC:
+        frame[column] = pd.to_numeric(frame[column],errors='coerce').astype('float64')
+    return frame.sort_values(['segment_id','slot']).reset_index(drop=True)
+
+
 @dataclass
 class Window:
     segment_id: str
@@ -202,14 +227,14 @@ def rf_columns(classes: list[str], with_lstm: bool = True) -> list[str]:
     return columns
 
 
-def profile_features(entry: dict | None, target_slot: int, classes: list[str]) -> dict:
+def profile_features(entry: dict | None, target_slot: int, classes: list[str], granularity='block') -> dict:
     """The road's historical class distribution for the target block and day type
     (missing for a road without history, so the model also works for new roads)."""
     import patterns
 
     if not entry or not sum(entry["all"].values()):
         return {**{f"profile_{c}": math.nan for c in classes}, "profile_records": 0.0}
-    day, block = slot_date_block(target_slot)
+    day, block = date_block_for_slot(target_slot,granularity)
     probabilities, records, _ = patterns.pattern_distribution(entry, block, patterns.day_type(day), classes)
     return {**{f"profile_{c}": probabilities[c] for c in classes}, "profile_records": float(records)}
 
@@ -217,7 +242,8 @@ def profile_features(entry: dict | None, target_slot: int, classes: list[str]) -
 def rf_feature_row(rows: list[dict], lstm_forecast: dict | None, target_slot: int, road_type: str,
                    classes: list[str], profile_entry: dict | None = None) -> dict:
     last = rows[-1]
-    target_day, target_block = slot_date_block(target_slot)
+    granularity = 'day' if last.get('time_block') == 'Daily' else 'block'
+    target_day, target_block = date_block_for_slot(target_slot,granularity)
     labels = [r.get("label") for r in rows]
     known = [label for label in labels if label]
 
@@ -239,7 +265,7 @@ def rf_feature_row(rows: list[dict], lstm_forecast: dict | None, target_slot: in
     row["target_weekend"] = 1.0 if target_day.weekday() >= 5 else 0.0
     row["target_month"] = float(target_day.month)
     row.update({f"road_type_{t}": 1.0 if road_type == t else 0.0 for t in ROAD_TYPES})
-    row.update(profile_features(profile_entry, target_slot, classes))
+    row.update(profile_features(profile_entry, target_slot, classes,granularity))
     return row
 
 
@@ -339,9 +365,19 @@ class HybridModel:
     """A trained LSTM + Random Forest pair with everything needed to reproduce its inputs."""
 
     def __init__(self, lstm, rf, scaler: StepScaler, classes: list[str], columns: list[str], version: str = "",
-                 weights: dict[str, float] | None = None):
+                 weights: dict[str, float] | None = None, granularity='block', cycle_scales=None):
         self.lstm, self.rf, self.scaler, self.classes, self.columns, self.version = lstm, rf, scaler, classes, columns, version
         self.weights = weights or {c: 1.0 for c in classes}
+        self.granularity = granularity
+        self.cycle_scales = cycle_scales
+
+    @property
+    def kind(self) -> str:
+        estimator = getattr(self.rf, 'named_steps', {}).get('model', self.rf)
+        cycle_family = {'HistGradientBoostingClassifier': 'cycle_gradient_boosting',
+                        'LogisticRegression': 'cycle_logistic'}.get(type(estimator).__name__, 'cycle_random_forest')
+        family = cycle_family if self.cycle_scales is not None else 'hybrid_lstm_rf' if self.lstm is not None else 'random_forest'
+        return ('daily_' if self.granularity == 'day' else '') + family
 
     def class_probabilities(self, features: pd.DataFrame) -> np.ndarray:
         """Random Forest probabilities in self.classes order (before decision weights)."""
@@ -351,25 +387,27 @@ class HybridModel:
         import joblib
 
         directory.mkdir(parents=True, exist_ok=True)
-        self.lstm.save(directory / "lstm.keras")
+        if self.lstm is not None:
+            self.lstm.save(directory / "lstm.keras")
         joblib.dump({"rf": self.rf, "classes": self.classes, "columns": self.columns, "scaler": self.scaler.to_dict(),
-                     "weights": self.weights, "feature_version": FEATURE_VERSION, "seq_len": SEQ_LEN, "numeric": NUMERIC},
+                     "weights": self.weights, "kind": self.kind, 'granularity':self.granularity, 'cycle_scales':self.cycle_scales, "feature_version": FEATURE_VERSION, "seq_len": SEQ_LEN, "numeric": NUMERIC},
                     directory / "rf_bundle.joblib")
         (directory / "manifest.json").write_text(json.dumps({"version": self.version, "feature_version": FEATURE_VERSION,
-                                                             "decision_weights": self.weights, **(extra or {})},
+                                                             "kind": self.kind, "decision_weights": self.weights, **(extra or {})},
                                                             indent=2, default=str), encoding="utf-8")
 
     @classmethod
     def load(cls, directory: Path, version: str = "") -> "HybridModel":
         import joblib
-        from tensorflow import keras
-
         bundle = joblib.load(directory / "rf_bundle.joblib")
         if bundle.get("feature_version") != FEATURE_VERSION:
             raise ValueError("The model was trained with a different feature definition; retrain it.")
-        lstm = keras.models.load_model(directory / "lstm.keras", compile=False)
+        lstm = None
+        if bundle.get('kind', 'hybrid_lstm_rf').endswith('hybrid_lstm_rf'):
+            from tensorflow import keras
+            lstm = keras.models.load_model(directory / "lstm.keras", compile=False)
         return cls(lstm, bundle["rf"], StepScaler.from_dict(bundle["scaler"]), bundle["classes"], bundle["columns"], version,
-                   bundle.get("weights"))
+                   bundle.get("weights"),bundle.get('granularity','block'),bundle.get('cycle_scales'))
 
     def predict(self, rows: list[dict], start_slot: int, road_type: str, horizons: int, profile_entry: dict | None = None) -> list[dict]:
         """Forecast `horizons` blocks after the window, feeding forecasts back recursively."""
@@ -379,24 +417,33 @@ class HybridModel:
                      profile_entries: list[dict | None] | None = None) -> list[list[dict]]:
         """Batch version of predict: one list of horizon forecasts per window."""
         sequences = [[dict(r) for r in rows[-SEQ_LEN:]] for rows in rows_list]
+        observed = [[dict(r) for r in rows] for rows in sequences]
         entries = profile_entries or [None] * len(sequences)
         results: list[list[dict]] = [[] for _ in sequences]
         for h in range(1, horizons + 1):
-            forecasts = lstm_forecast(self.lstm, [s[-SEQ_LEN:] for s in sequences], self.scaler)
+            forecasts = (lstm_forecast(self.lstm, [s[-SEQ_LEN:] for s in sequences], self.scaler)
+                         if self.lstm is not None else [None for _ in sequences])
             target_slots = [slot + h for slot in start_slots]
-            features = pd.DataFrame([rf_feature_row(s[-SEQ_LEN:], f, t, rt, self.classes, e)
-                                     for s, f, t, rt, e in zip(sequences, forecasts, target_slots, road_types, entries)],
-                                    columns=self.columns)
+            if self.cycle_scales is not None:
+                import cycle_features
+                forecasts = [cycle_features.projected_values(rows, target, self.cycle_scales) for rows, target in zip(observed, target_slots)]
+                feature_rows = [{**rf_feature_row(s[-SEQ_LEN:], None, t, rt, self.classes, e),
+                                 **cycle_features.feature_row(origin, t, self.cycle_scales)}
+                                for s, origin, t, rt, e in zip(sequences, observed, target_slots, road_types, entries)]
+            else:
+                feature_rows = [rf_feature_row(s[-SEQ_LEN:], f, t, rt, self.classes, e)
+                                for s, f, t, rt, e in zip(sequences, forecasts, target_slots, road_types, entries)]
+            features = pd.DataFrame(feature_rows, columns=self.columns)
             # Decision weights (tuned on validation data) let rare classes win when warranted.
             probabilities = apply_weights(self.class_probabilities(features), self.classes, self.weights)
             for i, (sequence, forecast, target_slot) in enumerate(zip(sequences, forecasts, target_slots)):
                 probs = {c: float(probabilities[i][j]) for j, c in enumerate(self.classes)}
                 predicted = max(probs, key=probs.get)
                 results[i].append({"horizon": h, "slot": target_slot, "probabilities": probs, "predicted_class": predicted,
-                                   "predicted_values": {k: round(v, 3) for k, v in forecast.items()}})
-                day, block = slot_date_block(target_slot)
+                                   "predicted_values": {k: round(v, 3) for k, v in (forecast or {}).items()}})
+                day, block = date_block_for_slot(target_slot,self.granularity)
                 last = sequence[-1]
-                sequence.append({**{c: forecast.get(c, last.get(c)) for c in NUMERIC}, "incident_reports": last.get("incident_reports"),
+                sequence.append({**{c: (forecast or {}).get(c, last.get(c)) for c in NUMERIC}, "incident_reports": last.get("incident_reports"),
                                  "wet": last.get("wet"), "roadwork_flag": last.get("roadwork_flag"), "label": predicted,
                                  "time_block": block, "date": day, "slot": target_slot})
         return results

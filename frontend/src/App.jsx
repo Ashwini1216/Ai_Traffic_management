@@ -4,12 +4,15 @@ import {
   Gauge, Inbox, Layers, LayoutDashboard, LocateFixed, Map as MapIcon, MapPin, Menu, Navigation, Plus, Radio,
   RefreshCw, Route, Search, ShieldCheck, SlidersHorizontal, TrendingUp, UserCheck, UserPlus, Users, Video, X,
 } from 'lucide-react';
-import { API, BLOCKS, CATEGORY_LABELS, CITIZEN_CATEGORIES, api, dateTime, localISODate, longDate, n, readJson, writeJson } from './lib.js';
+import { API, BLOCKS, CATEGORY_LABELS, CITIZEN_CATEGORIES, api, dateTime, localISODate, longDate, modelName, n, readJson, writeJson } from './lib.js';
 import { MapSetupNotice, infoContent, useLivePosition, useMap } from './maps.jsx';
 import { subscribe } from './events.js';
 import { LEVELS, LevelBadge, StatTile, level } from './viz.jsx';
 import { AccountPage, NotificationsPage, PlaceSearch, PlanTrips, RoadForecast, StartJourney, desktopAlertsOn } from './commuter.jsx';
 import { AccessDesk, AlertsDesk, CoverageDesk, DataDesk, DemandDesk, ModelsDesk, NoticeDesk, ZoneMonitor } from './authority.jsx';
+import { PublicValidation } from './validation.jsx';
+import { CameraPreview } from './camera_preview.jsx';
+import { AccuracyFindings } from './accuracy_findings.jsx';
 
 const USER_NAV = [
   { section: 'MY TRAVEL', items: [
@@ -386,23 +389,25 @@ function Overview({ data, navigate }) {
   const labeled = ['High', 'Medium', 'Low'].reduce((sum, key) => sum + (totals[key] || 0), 0);
   const latest = data.models[0];
   const active = data.models.find(m => m.status === 'active');
+  const displayed = active || latest;
   return <>
     <PageHeading eyebrow={`${todayLabel} · BENGALURU`} title="Traffic data" subtitle="The historical dataset behind the forecasts, and the current model." action={<button className="button button-primary" onClick={() => navigate('coverage')}><Database size={16} /> Data coverage</button>} />
     <div className="notice-strip"><span className="notice-icon"><Activity size={16} /></span><span><b>Historical data view</b><small>Dataset: {longDate(summary?.date_start)} – {longDate(summary?.date_end)}. Not live traffic.{data.synthetic?.available ? ` A separate synthetic dataset contains ${n(data.synthetic.record_count)} simulated records.` : ''}</small></span><span className="notice-badge">RESEARCH</span></div>
     <section className="metric-grid">
-      <Metric icon={Database} label="Historical observations" value={n(summary?.record_count)} sub="Validated rows from the dataset" tone="blue" />
+      <Metric icon={Database} label="Historical observations" value={n(summary?.record_count)} sub={summary?.time_granularity === 'day' ? 'Daily publisher records; no time-of-day labels' : 'Schema-checked rows from the dataset'} tone="blue" />
       <Metric icon={MapPin} label="Roads" value={n(summary?.road_count)} sub={`${n(data.segments.filter(s => s.has_map_location).length)} placed on the map`} tone="violet" />
       <Metric icon={ShieldCheck} label="Roads with verified records" value={n(data.coverage.filter(x => x.verified_coverage).length)} sub="Authority-verified observations" tone="green" />
       <Metric icon={AlertTriangle} label="Open community reports" value={n(data.incidents.filter(x => x.status === 'reported').length)} sub="Awaiting authority verification" tone="orange" />
     </section>
+    {summary?.block_provenance_notice && <p className="form-hint">{summary.block_provenance_notice}</p>}
     <section className="overview-grid">
       <div className="card traffic-card"><div className="card-heading"><div><h2>Congestion levels in the dataset</h2><p>Share of labelled historical records</p></div></div>
         <div className="meter-list">{['Low', 'Medium', 'High'].map(name => <div className="meter-row" key={name} title={`${name}: ${n(totals[name])} records`}><span className="meter-label"><LevelBadge value={name} compact /></span><span className="meter-track" style={{ background: level(name).track }}><i style={{ width: `${labeled ? (totals[name] || 0) / labeled * 100 : 0}%`, background: level(name).color }} /></span><b className="meter-value">{labeled ? Math.round((totals[name] || 0) / labeled * 100) : 0}%</b></div>)}</div>
-        <div className="chart-footnote"><AlertTriangle size={14} /> {n(labeled)} labelled records. Labels come from the dataset and are not sensor-verified.</div></div>
-      <div className="card model-card"><div className="card-heading"><div><h2>Forecasting model</h2><p>Hybrid LSTM → Random Forest</p></div><span className="pill pill-warn">{active ? 'ACTIVE' : 'NOT ACTIVE'}</span></div>
-        {latest ? <><div className="model-score"><span className="score-number">{latest.test.macro_f1?.toFixed(3) ?? '—'}</span><span className="score-label">test macro-F1 ({latest.version})</span></div>
-          <div className="baseline-row"><span>Best baseline</span><b>{Math.max(...Object.values(latest.baselines_test).map(b => b.macro_f1 || 0)).toFixed(3)}</b></div>
-          <div className="model-disclaimer"><AlertTriangle size={16} /><span>{latest.acceptance.passed ? 'Passed the acceptance checks.' : 'Did not pass the acceptance checks, so live forecasts use historical patterns.'}</span></div></> : <div className="empty-state"><b>No model trained yet</b></div>}
+        <div className="chart-footnote"><AlertTriangle size={14} /> {n(labeled)} labelled records. {summary?.daily_label_notice || 'Labels come from the dataset and are not sensor-verified.'}</div></div>
+      <div className="card model-card"><div className="card-heading"><div><h2>Forecasting model</h2><p>{modelName(displayed?.kind)}</p></div><span className="pill pill-warn">{active ? 'ACTIVE' : 'NOT ACTIVE'}</span></div>
+        {displayed ? <><div className="model-score"><span className="score-number">{displayed.test.macro_f1?.toFixed(3) ?? '—'}</span><span className="score-label">test macro-F1 ({displayed.version})</span></div>
+          <div className="baseline-row"><span>Best baseline</span><b>{Math.max(...Object.values(displayed.baselines_test).map(b => b.macro_f1 || 0)).toFixed(3)}</b></div>
+          <div className="model-disclaimer"><AlertTriangle size={16} /><span>{displayed.acceptance.passed ? 'Passed the acceptance checks.' : 'Did not pass the acceptance checks, so live forecasts use historical patterns.'}</span></div></> : <div className="empty-state"><b>No model trained yet</b></div>}
         <button className="button button-secondary full-button" onClick={() => navigate('models')}>View model evaluation <ArrowRight size={15} /></button></div>
     </section>
   </>;
@@ -431,7 +436,7 @@ function TrafficMap({ data }) {
 // ---------- cameras ----------
 
 function CameraScreen({ data, refresh, setToast, user }) {
-  const blank = { camera_id: '', display_name: '', area: '', road: '', latitude: '', longitude: '', source_type: 'authorized_cctv', authorization_status: 'pending', operational_status: 'unknown', stream_url: '', collection_interval_seconds: 300, sample_seconds: 20, line_y: '' };
+  const blank = { camera_id: '', display_name: '', area: '', road: '', latitude: '', longitude: '', source_type: 'authorized_cctv', authorization_status: 'pending', operational_status: 'unknown', stream_url: '', collection_interval_seconds: 300, sample_seconds: 20, line_y: '', measurement_validated: false, validation_note: '' };
   const [registry, setRegistry] = useState(blank);
   const [editingCamera, setEditingCamera] = useState('');
   const [cameraId, setCameraId] = useState(''), [file, setFile] = useState(null), [dateValue, setDateValue] = useState(() => localISODate()), [block, setBlock] = useState('Morning'), [busy, setBusy] = useState(false), [analysis, setAnalysis] = useState(null), [collecting, setCollecting] = useState('');
@@ -463,19 +468,21 @@ function CameraScreen({ data, refresh, setToast, user }) {
   }
   async function collect(camera) {
     setCollecting(camera.camera_id);
-    try { const r = await api(`/api/cameras/${encodeURIComponent(camera.camera_id)}/collect`, { method: 'POST' }); setToast(r.ok ? `Measured ${r.tracked_vehicles} vehicles${r.line_crossings != null ? `, ${r.line_crossings} crossed the line` : ''}.` : `Collection failed: ${r.error}`); await refresh(); }
+    try { const r = await api(`/api/cameras/${encodeURIComponent(camera.camera_id)}/collect`, { method: 'POST' }); setToast(r.ok ? `${r.average_vehicles_in_frame != null ? `${r.average_vehicles_in_frame} vehicles visible per frame on average` : `${r.tracked_vehicles} vehicle tracks`}${r.line_crossings != null ? `, ${r.line_crossings} crossed the line` : ''}.` : `Collection failed: ${r.error}`); await refresh(); }
     catch (err) { setToast(err.message); } finally { setCollecting(''); }
   }
   const eligible = data.cameras.filter(x => x.authorization_status === 'approved' && x.operational_status === 'online' && x.area && x.road);
   const edit = id => {
     const cam = data.cameras.find(x => x.camera_id === id);
     setEditingCamera(id);
-    if (cam) setRegistry({ camera_id: cam.camera_id, display_name: cam.display_name, area: cam.area || '', road: cam.road || '', latitude: cam.latitude ?? '', longitude: cam.longitude ?? '', source_type: cam.source_type, authorization_status: cam.authorization_status, operational_status: cam.operational_status, stream_url: '', collection_interval_seconds: cam.collection_interval_seconds || 300, sample_seconds: cam.sample_seconds || 20, line_y: cam.counting_line ? cam.counting_line[0][1] : '' });
+    if (cam) setRegistry({ camera_id: cam.camera_id, display_name: cam.display_name, area: cam.area || '', road: cam.road || '', latitude: cam.latitude ?? '', longitude: cam.longitude ?? '', source_type: cam.source_type, authorization_status: cam.authorization_status, operational_status: cam.operational_status, stream_url: '', collection_interval_seconds: cam.collection_interval_seconds || 300, sample_seconds: cam.sample_seconds || 20, line_y: cam.counting_line ? cam.counting_line[0][1] : '', measurement_validated: Boolean(cam.measurement_validated), validation_note: cam.validation_note || '' });
     else setRegistry(blank);
   };
   const set = (key, value) => setRegistry({ ...registry, [key]: value });
   return <><PageHeading eyebrow="CAMERA SOURCES" title="CCTV review and live streams" subtitle="Register authorized cameras. Review uploaded clips, or let approved streams be sampled automatically." action={<span className={`pill ${isAuthority ? 'pill-neutral' : 'pill-warn'}`}><ShieldCheck size={14} />{isAuthority ? 'AUTHORITY ACCESS' : 'AUTHORITY SIGN-IN REQUIRED'}</span>} />
     <div className="model-warning"><AlertTriangle size={19} /><span><b>Measurements are estimates.</b> Counts come from detecting and tracking people and vehicles; flow needs a counting line. Stream video is analysed and not stored. Use only footage your authority is permitted to use.</span></div>
+    <AccuracyFindings kind="public_camera" />
+    <CameraPreview cameras={data.cameras} isAuthority={isAuthority} />
     <VideoCheck isAuthority={isAuthority} />
     <div className="camera-grid"><section className="card form-card"><div className="card-heading"><div><h2>Camera registry</h2><p>Location, approval, and optional live stream.</p></div><Camera size={19} className="muted-icon" /></div>
       <form className="incident-form" onSubmit={addCamera}>{data.cameras.length > 0 && <label>Update an existing camera<select value={editingCamera} onChange={e => edit(e.target.value)}><option value="">Add a new camera</option>{data.cameras.map(cam => <option key={cam.camera_id} value={cam.camera_id}>{cam.display_name} · {cam.road || 'road not set'}</option>)}</select></label>}
@@ -484,6 +491,8 @@ function CameraScreen({ data, refresh, setToast, user }) {
         <div className="form-pair"><label>Latitude <small>optional</small><input type="number" step="any" min="-90" max="90" required={registry.longitude !== ''} value={registry.latitude} onChange={e => set('latitude', e.target.value)} placeholder="12.9716" /></label><label>Longitude <small>optional</small><input type="number" step="any" min="-180" max="180" required={registry.latitude !== ''} value={registry.longitude} onChange={e => set('longitude', e.target.value)} placeholder="77.5946" /></label></div>
         <div className="form-pair"><label>Source type<select value={registry.source_type} onChange={e => set('source_type', e.target.value)}>{[['authorized_cctv', 'Authorized CCTV'], ['approved_ip_camera', 'Approved IP camera'], ['permitted_integration', 'Permitted integration']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>Authorization<select value={registry.authorization_status} onChange={e => set('authorization_status', e.target.value)}><option value="pending">Pending review</option><option value="approved">Approved</option><option value="revoked">Revoked</option></select></label></div>
         <label>Operational status<select value={registry.operational_status} onChange={e => set('operational_status', e.target.value)}><option value="unknown">Unknown</option><option value="online">Online</option><option value="offline">Offline</option></select></label>
+        <label className="checkbox"><input type="checkbox" checked={Boolean(registry.measurement_validated)} onChange={e=>set('measurement_validated',e.target.checked)} /> Counts checked against manually counted road footage</label>
+        {registry.measurement_validated && <label>Camera validation note<input required minLength="12" value={registry.validation_note || ''} onChange={e=>set('validation_note',e.target.value)} placeholder="Footage, lighting and manual-count comparison" /><small>Only validated camera measurements are automatically used as verified live observations.</small></label>}
         <label>Stream address <small>{editingCamera ? 'leave empty to keep the saved address' : 'optional: rtsp://, http(s)://'}</small><input value={registry.stream_url} onChange={e => set('stream_url', e.target.value)} placeholder="rtsp://camera.example/stream" /></label>
         <div className="form-pair"><label>Sample every<select value={registry.collection_interval_seconds} onChange={e => set('collection_interval_seconds', e.target.value)}><option value={60}>1 minute</option><option value={300}>5 minutes</option><option value={900}>15 minutes</option></select></label><label>Seconds per sample<input type="number" min="5" max="120" value={registry.sample_seconds} onChange={e => set('sample_seconds', e.target.value)} /></label></div>
         <label>Counting line <small>horizontal line height, 0 (top) to 1 (bottom); empty = no flow estimate</small><input type="number" min="0" max="1" step="0.05" value={registry.line_y} onChange={e => set('line_y', e.target.value)} placeholder="0.6" /></label>
@@ -492,7 +501,7 @@ function CameraScreen({ data, refresh, setToast, user }) {
         <form className="incident-form" onSubmit={analyze}><label>Approved camera source<select value={cameraId} onChange={e => setCameraId(e.target.value)}><option value="">Choose an approved camera</option>{eligible.map(x => <option value={x.camera_id} key={x.camera_id}>{x.display_name} · {x.road}</option>)}</select></label><label>Video clip<input type="file" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mp4,.avi,.mov,.mkv" onChange={e => setFile(e.target.files?.[0] || null)} /><small>MP4, AVI, MOV, or MKV. Maximum size: 100 MB.</small></label>
           <div className="form-pair"><label>Observation date<input type="date" required value={dateValue} onChange={e => setDateValue(e.target.value)} /></label><label>Time of day<select value={block} onChange={e => setBlock(e.target.value)}>{BLOCKS.map(x => <option key={x}>{x}</option>)}</select></label></div>
           <button className="button button-primary" disabled={busy || !isAuthority || !eligible.length}><Video size={15} />{busy ? 'Reviewing clip…' : 'Review and save clip'}</button></form>
-        {analysis && <div className={analysis.error ? 'inline-error' : 'result-card'}>{analysis.error || <><span className="result-icon"><Camera size={18} /></span><div className="result-main"><small>VIDEO REVIEW · ESTIMATE</small><b>{analysis.analysis.clip_vehicle_count_estimate} vehicles seen{analysis.analysis.people ? `, up to ${analysis.analysis.people.most_in_one_frame} people at once` : ''}</b><p>{analysis.analysis.sampled_frames} frames reviewed{analysis.analysis.clip_fully_analyzed === false ? ` (only the first ${analysis.analysis.analyzed_seconds} s of ${analysis.analysis.clip_seconds ?? '?'} s were analysed)` : ''}. This is an unverified estimate.</p><small>Review reference #{analysis.observation_id}</small></div></>}</div>}</section></div>
+        {analysis && <div className={analysis.error ? 'inline-error' : 'result-card'}>{analysis.error || <><span className="result-icon"><Camera size={18} /></span><div className="result-main"><small>VIDEO REVIEW · ESTIMATE</small><b>{analysis.analysis.clip_vehicle_count_estimate} {analysis.analysis.count_method === 'peak_vehicles_in_sampled_frame' ? 'vehicles in the peak frame' : 'vehicle tracks seen'}{analysis.analysis.people ? `, up to ${analysis.analysis.people.most_in_one_frame} people at once` : ''}</b><p>{analysis.analysis.sampled_frames} frames reviewed{analysis.analysis.clip_fully_analyzed === false ? ` (only the first ${analysis.analysis.analyzed_seconds} s of ${analysis.analysis.clip_seconds ?? '?'} s were analysed)` : ''}. {analysis.analysis.track_count_notice || 'Counts may include tracking errors.'} This is an unverified estimate.</p><small>Review reference #{analysis.observation_id}</small></div></>}</div>}</section></div>
     <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Registered cameras</h2><p>Only approved, online cameras are sampled or used for review.</p></div><span className="pill pill-neutral">{data.cameras.length} ENTRIES</span></div>
       {data.cameras.length ? <div className="table-wrap"><table><thead><tr><th>Name</th><th>Area / road</th><th>Authorization</th><th>Operation</th><th>Stream</th><th>Last measurement</th><th /></tr></thead><tbody>{data.cameras.map(cam => <tr key={cam.camera_id}>
         <td className="road-name">{cam.display_name}<small className="table-sub">{cam.camera_id}</small></td><td>{[cam.area, cam.road].filter(Boolean).join(' · ') || 'Not assigned'}</td>
@@ -502,11 +511,15 @@ function CameraScreen({ data, refresh, setToast, user }) {
         <td>{cam.has_stream && cam.authorization_status === 'approved' && cam.operational_status === 'online' && <button className="text-action" disabled={collecting === cam.camera_id} onClick={() => collect(cam)}>{collecting === cam.camera_id ? 'Sampling…' : 'Collect now'}</button>}</td></tr>)}</tbody></table></div>
         : <div className="empty-state"><span><Camera size={23} /></span><b>No camera sources registered</b><small>Authority approval is required before camera data can be accepted.</small></div>}</section>
     <section className="card report-list-card camera-table"><div className="card-heading"><div><h2>Saved CCTV footage</h2><p>Uploaded clips are deleted after the retention period; their analysis is kept.</p></div><span className="pill pill-neutral">{data.footage?.length || 0} CLIPS</span></div>{data.footage?.length ? <div className="footage-grid">{data.footage.map(clip => <FootageClip key={clip.footage_id} clip={clip} />)}</div> : <div className="empty-state"><span><Video size={23} /></span><b>No footage uploaded yet</b><small>Analyze an authorized clip above to save it for review.</small></div>}</section>
+    <details className="card report-list-card"><summary>Vehicle-count benchmark results</summary>
+      <AccuracyFindings kind="tracking_upgrade" />
+      <PublicValidation kind="vehicles" />
+    </details>
   </>;
 }
 
 // Any authorised video can be checked for people and vehicles without registering a camera.
-const VIDEO_STAGES = { starting: 'Starting…', waiting: 'Waiting for another video to finish…', loading: 'Loading the detector (the first time, it downloads about 6 MB)…', analysing: 'Counting people and vehicles…' };
+const VIDEO_STAGES = { starting: 'Starting…', waiting: 'Waiting for another video to finish…', loading: 'Loading the detector…', analysing: 'Counting people and vehicles…' };
 const VEHICLE_WORDS = { car: ['car', 'cars'], motorcycle: ['motorcycle', 'motorcycles'], bus: ['bus', 'buses'], truck: ['truck', 'trucks'] };
 const clipTime = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
@@ -533,7 +546,29 @@ function VideoCheck({ isAuthority }) {
       <button className="button button-primary" disabled={busy || running || !isAuthority}><Users size={15} />{busy ? 'Uploading…' : running ? 'Counting…' : 'Count people and vehicles'}</button></form>
     {running && <div className="video-progress" role="status"><b>{VIDEO_STAGES[job.stage] || 'Working…'}</b>{share != null && <><div className="progress-track" role="progressbar" aria-label="Analysis progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={share}><i style={{ width: `${share}%` }} /></div><small>{share}% · {n(job.frames_done)} of {n(job.frames_total)} frames</small></>}</div>}
     {(error || job?.status === 'failed') && <div className="inline-error">{error || job.error}</div>}
-    {result && <VideoCounts result={result} />}</section>;
+    {result && <><VideoCounts result={result} /><CountValidation jobId={job.job_id} /></>}</section>;
+}
+
+function CountValidation({ jobId }) {
+  const [counts,setCounts] = useState({ car:'',motorcycle:'',bus:'',truck:'' });
+  const [note,setNote] = useState('');
+  const [validation,setValidation] = useState(null);
+  const [error,setError] = useState('');
+  const [busy,setBusy] = useState(false);
+  async function compare(e) {
+    e.preventDefault();setBusy(true);setError('');
+    const expected=Object.fromEntries(Object.entries(counts).filter(([,v])=>v!=='').map(([k,v])=>[k,Number(v)]));
+    try { setValidation(await api(`/api/video-samples/${jobId}/validate`,{method:'POST',body:JSON.stringify({expected,note})})); }
+    catch(err) { setError(err.message); } finally { setBusy(false); }
+  }
+  return <form className="incident-form" onSubmit={compare}>
+    <h3>Check against a manual count</h3><p className="form-hint">Count distinct vehicles in the analysed interval. A track may be counted again after occlusion. Leave unreviewed classes empty; enter zero when you checked that none were present.</p>
+    <div className="form-pair">{Object.keys(counts).map(kind=><label key={kind}>Reference {kind} count<input type="number" min="0" max="100000" value={counts[kind]} onChange={e=>setCounts({...counts,[kind]:e.target.value})} /></label>)}</div>
+    <label>Review note<input required minLength="12" value={note} onChange={e=>setNote(e.target.value)} placeholder="How you manually checked this clip" /></label>
+    <button className="button button-secondary" disabled={busy}>{busy?'Comparing…':'Compare reference counts'}</button>
+    {error && <div className="inline-error">{error}</div>}
+    {validation && <div role="status"><b>Mean absolute count error: {validation.mean_absolute_count_error}</b><p className="form-hint">{validation.notice}</p></div>}
+  </form>;
 }
 
 function VideoCounts({ result }) {
@@ -543,9 +578,12 @@ function VideoCounts({ result }) {
       <StatTile label="Most people at once" value={n(people.most_in_one_frame)} sub="in a single frame" />
       <StatTile label="Different people seen" value={people.different_people_tracked == null ? '—' : n(people.different_people_tracked)} sub="followed across the clip" />
       <StatTile label="People in view, on average" value={people.average_in_frame ?? '—'} sub="per analysed frame" />
-      <StatTile label="Vehicles seen" value={n(result.clip_vehicle_count_estimate)} sub={vehicles.join(' · ') || 'none detected'} /></div>
+      {result.average_vehicles_in_frame != null && <StatTile label="Vehicles in view, on average" value={result.average_vehicles_in_frame} sub="per analysed frame" />}
+      {result.peak_vehicles_in_frame != null && <StatTile label="Most vehicles at once" value={result.peak_vehicles_in_frame} sub="in a single frame" />}
+      <StatTile label={result.count_method === 'peak_vehicles_in_sampled_frame' ? 'Vehicles in peak frame' : 'Vehicle tracks seen'} value={n(result.clip_vehicle_count_estimate)} sub={vehicles.join(' · ') || 'none detected'} /></div>
+    {result.track_count_notice && <p className="form-hint">{result.track_count_notice}</p>}
     {result.preview_image && <figure className="video-preview"><img src={result.preview_image} alt={`The video at ${clipTime(result.preview_second || 0)}, with people outlined in orange and vehicles in blue`} /><figcaption>Busiest moment, at {clipTime(result.preview_second || 0)}: people outlined in orange, vehicles in blue.</figcaption></figure>}
-    <p className="form-hint">{n(result.sampled_frames)} frames analysed{result.clip_fully_analyzed === false ? ` (only the first ${result.analyzed_seconds} s of ${result.clip_seconds ?? '?'} s)` : ''}. These are estimates from the YOLOv8n detector, not verified counts. In dense crowds people hide behind each other, so the real numbers are higher.</p></div>;
+    <p className="form-hint">{n(result.sampled_frames)} frames analysed{result.clip_fully_analyzed === false ? ` (only the first ${result.analyzed_seconds} s of ${result.clip_seconds ?? '?'} s)` : ''}. These are estimates from the {result.model || 'vehicle'} detector. Counts can be affected when people hide behind each other, by camera angles and by tracking errors. Compare with a manual count to measure the error.</p></div>;
 }
 
 function FootageClip({ clip }) {

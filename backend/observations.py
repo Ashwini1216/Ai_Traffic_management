@@ -76,6 +76,8 @@ class ObservationInput(BaseModel):
 
     @model_validator(mode="after")
     def _consistent(self):
+        if self.observed_end is not None and self.observed_start is None:
+            raise ValueError('observed_end requires observed_start')
         if self.observed_start is not None:
             if self.observed_start.tzinfo is None or (self.observed_end and self.observed_end.tzinfo is None):
                 raise ValueError("observed_start and observed_end must include a timezone")
@@ -210,10 +212,6 @@ def store_observation(raw: dict) -> dict:
            start.isoformat(), end.isoformat() if end else None, interval, payload.vehicle_count, payload.flow_per_hour,
            payload.occupancy, payload.queue_length, precipitation, temperature, snapshot_id))
         record_id = cur.lastrowid
-        # Only block-level records are comparable with block forecasts; a labelled record
-        # evaluates the forecast's class, and numeric values give its error.
-        if (start, end) == core.block_bounds(date.fromisoformat(payload.observed_date), payload.time_block):
-            forecasting.record_outcome(db, segment_id, payload.observed_date, payload.time_block, payload.model_dump())
         if payload.camera_id:
             db.execute("UPDATE cameras SET last_success_at=? WHERE camera_id=?", (iso_now(), payload.camera_id))
     segments.invalidate_coverage()
@@ -261,6 +259,11 @@ def review_observation(observation_id: int, payload: ObservationReview, actor: s
                    (payload.quality_status, actor, iso_now(), payload.note.strip() or None, observation_id))
         db.execute("INSERT INTO audit_log(action,entity_type,entity_id,actor,occurred_at,details_json) VALUES(?,?,?,?,?,?)",
                    ("observation_reviewed", "traffic_observation", str(observation_id), actor, iso_now(), payload.model_dump_json()))
+        # A review can retract an earlier outcome as well as approve a new one.
+        db.execute('UPDATE model_predictions SET observed_outcome=NULL,evaluated_at=NULL,observed_values_json=NULL,errors_json=NULL,outcome_observation_id=NULL WHERE outcome_observation_id=?', (observation_id,))
+        if payload.quality_status == 'verified':
+            row = dict(db.execute('SELECT * FROM traffic_observations WHERE id=?', (observation_id,)).fetchone())
+            forecasting.record_outcome(db, row['segment_id'], row['observed_date'], row['time_block'], row)
     segments.invalidate_coverage()
     return _decode(store.rows("SELECT * FROM traffic_observations WHERE id=?", (observation_id,)))[0]
 

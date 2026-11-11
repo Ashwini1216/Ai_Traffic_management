@@ -109,6 +109,13 @@ def _weather(query: dict) -> dict:
 def external_json(url: str, user_agent: str | None = None):
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
+    if "/route/v1/" in parsed.path:
+        path = parsed.path + (";" + parsed.params if parsed.params else "")
+        points = [[float(v) for v in p.split(",")] for p in path.rsplit("/", 1)[-1].split(";")]
+        a, b = points[0], points[-1]
+        bend = [(a[0]+b[0])/2, (a[1]+b[1])/2+.012]
+        geometries = [points, [a,bend,b]]
+        return {"code":"Ok","routes":[{"geometry":{"coordinates":g},"distance":sum(_distance_m((x[1],x[0]),(y[1],y[0])) for x,y in zip(g,g[1:])),"duration":900+300*i} for i,g in enumerate(geometries)]}
     if "nominatim" in parsed.netloc:
         assert user_agent and "FlowState" in user_agent, "OpenStreetMap requests must identify the app"
         return _openstreetmap(query)

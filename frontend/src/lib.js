@@ -20,7 +20,10 @@ export async function api(path, options = {}) {
     const message = errorMessage(body, response.status);
     // A token the server no longer accepts (expired, or the password was changed) ends the session.
     if (response.status === 401 && token && !path.startsWith('/api/auth/login')) publish('session-ended', message);
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.code = body.detail?.code;
+    throw error;
   }
   return body;
 }
@@ -49,6 +52,8 @@ export const dateTime = value => (value ? new Date(value).toLocaleString('en-IN'
 export const minutes = seconds => `${Math.round(Number(seconds || 0) / 60)} min`;
 export const km = metres => `${(Number(metres || 0) / 1000).toFixed(1)} km`;
 export const label = text => String(text || '').replaceAll('_', ' ').replace(/^./, c => c.toUpperCase());
+export const modelName = kind => String(kind || '').startsWith('cycle_') ? 'Cycle-aware classifier' :
+  String(kind || '').endsWith('random_forest') ? 'Random Forest' : kind === 'daily_history_challenger' ? 'Daily history classifier' : 'Hybrid LSTM + RF';
 
 export const CATEGORY_LABELS = {
   accident: 'Accident', breakdown: 'Vehicle breakdown', road_blockage: 'Road blockage', heavy_traffic: 'Heavy traffic',
@@ -64,7 +69,8 @@ export const VEHICLE_LABELS = {
 };
 
 export const METHOD_LABELS = {
-  sequence_model: 'Hybrid LSTM → Random Forest', historical_pattern: 'Historical pattern', transfer: 'Similar roads',
+  daily_model: 'Daily forecast model', daily_historical_pattern: 'Daily historical pattern',
+  sequence_model: 'Recent-observation model', historical_pattern: 'Historical pattern', transfer: 'Similar roads',
   cold_start: 'Limited-data estimate',
 };
 

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Check, Cpu, Database, Layers, MapPin, Play, Plus, RefreshCw, ShieldCheck, TrendingUp, UserCheck, X } from 'lucide-react';
-import { BLOCKS, CATEGORY_LABELS, METHOD_LABELS, OFFICIAL_CATEGORIES, api, dateTime, label, localISODate, longDate, patch, post, shortDate, targetOptions } from './lib.js';
+import { BLOCKS, CATEGORY_LABELS, METHOD_LABELS, OFFICIAL_CATEGORIES, api, dateTime, label, localISODate, longDate, modelName, patch, post, shortDate, targetOptions } from './lib.js';
 import { MapSetupNotice, infoContent, useMap } from './maps.jsx';
 import { ChangePassword, PlaceSearch } from './commuter.jsx';
 import { ComparisonBars, LevelBadge, StatTile, level } from './viz.jsx';
+import { PublicValidation } from './validation.jsx';
+import { AccuracyFindings } from './accuracy_findings.jsx';
 
 function Heading({ eyebrow, title, subtitle, action }) {
   return <div className="page-heading"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>;
@@ -243,8 +245,9 @@ export function CoverageDesk({ setToast, googleRouting }) {
   const [segments, setSegments] = useState(null);
   const [roadTypes, setRoadTypes] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [routing, setRouting] = useState(null);
   const load = () => api('/api/segments').then(b => { setSegments(b.segments); setRoadTypes(b.road_types); });
-  useEffect(() => { load().catch(err => setToast(err.message)); }, []);
+  useEffect(() => { load().catch(err => setToast(err.message)); api('/api/routing/status').then(setRouting).catch(err=>setToast(err.message)); }, []);
   async function save(e) {
     e.preventDefault();
     try {
@@ -258,12 +261,15 @@ export function CoverageDesk({ setToast, googleRouting }) {
   return (
     <>
       <Heading eyebrow="DATA COVERAGE" title="Road and data-coverage registry" subtitle="Being on the map is not the same as having traffic data. The method column shows what each road's data supports." />
+      <PublicValidation kind="routing" />
+      {routing && <section className="card report-list-card"><div className="card-heading"><div><h2>Road routing coverage</h2><p>{routing.local_graph.available ? `Local D* Lite ${routing.local_graph.coverage?.scope === 'bengaluru_wide' ? 'city routing' : 'pilot'} available: ${routing.local_graph.nodes.toLocaleString('en-IN')} road nodes.` : routing.local_graph.message}</p></div></div>
+        <p className="form-hint">{routing.local_graph.coverage?.scope === 'bengaluru_wide' ? 'The installed graph covers the whole supported Bengaluru region, including the mapped city boundary.' : 'Local coverage is limited to the installed graph.'} {routing.provider !== 'local' && 'External routing remains available when a local route cannot be found.'} Traffic readings are available only on roads with observations. {routing.notice}</p></section>}
       <section className="card segment-card">
         {segments === null ? <Empty title="Loading…" /> : <div className="table-wrap"><table><thead><tr><th>Road</th><th>Location</th><th>Type</th><th>Records</th><th>Period</th><th>Missing</th><th>Weather</th><th>Method</th><th></th></tr></thead><tbody>
           {segments.map(s => <tr key={s.segment_id}>
             <td className="road-name">{s.road}<small className="table-sub">{s.area}</small></td>
             <td>{s.has_map_location ? label(s.location_source) : <span className="status-chip status-orange"><i />not mapped</span>}</td>
-            <td>{label(s.road_type)}</td><td>{s.record_count.toLocaleString('en-IN')}</td>
+            <td>{label(s.road_type)}</td><td>{s.record_count.toLocaleString('en-IN')}{s.daily_record_count > 0 && <small className="table-sub">{s.daily_record_count.toLocaleString('en-IN')} daily · {s.block_record_count} block records</small>}</td>
             <td>{s.earliest_observation ? `${longDate(s.earliest_observation)} – ${longDate(s.latest_observation)}` : '—'}</td>
             <td>{s.missing_slot_pct == null ? '—' : `${s.missing_slot_pct}%`}</td><td>{s.weather_coverage_pct == null ? '—' : `${s.weather_coverage_pct}%`}</td>
             <td title={s.notes.join(' ')}>{label(s.data_method)}</td>
@@ -361,10 +367,11 @@ export function ModelsDesk({ setToast, segments }) {
   const [detail, setDetail] = useState(null);
   const [training, setTraining] = useState(null);
   const [evaluation, setEvaluation] = useState(null);
+  const [readiness, setReadiness] = useState(null);
   const [replayForm, setReplayForm] = useState({ segment_id: '', as_of_date: '', as_of_time_block: 'Noon' });
   const [replay, setReplay] = useState(null);
   const load = () => api('/api/models').then(b => { setModels(b.models); setTraining(b.training); if (!selected && b.models[0]) setSelected(b.models[0].version); });
-  useEffect(() => { load().catch(err => setToast(err.message)); api('/api/evaluation').then(setEvaluation).catch(() => {}); }, []);
+  useEffect(() => { load().catch(err => setToast(err.message)); api('/api/evaluation').then(setEvaluation).catch(() => {}); api('/api/model-readiness').then(setReadiness).catch(err=>setToast(err.message)); }, []);
   useEffect(() => { if (selected) api(`/api/models/${selected}`).then(setDetail).catch(() => setDetail(null)); }, [selected]);
   useEffect(() => {
     if (!training?.running) return undefined;
@@ -380,20 +387,32 @@ export function ModelsDesk({ setToast, segments }) {
   }
   const m = detail?.metrics;
   const active = models?.find(x => x.status === 'active');
+  const isForest = detail?.kind?.endsWith('random_forest') || detail?.kind?.startsWith('cycle_');
+  const isDaily = m?.time_granularity === 'day';
+  const modelLabel = detail?.kind?.startsWith('cycle_') ? 'Cycle-aware classifier' : isForest ? 'Random Forest model' : 'Hybrid model';
   return (
     <>
-      <Heading eyebrow="FORECASTING MODELS" title="Hybrid LSTM → Random Forest" subtitle="Each version is evaluated on the latest held-out period and must pass predefined acceptance checks before it can be used."
-        action={<button className="button button-primary" disabled={training?.running} onClick={train}><Cpu size={15} />{training?.running ? 'Training…' : 'Train new version'}</button>} />
+      <Heading eyebrow="FORECASTING MODELS" title="Forecast models and validation" subtitle="Compare Hybrid LSTM → Random Forest with a standalone Random Forest. Settings are selected on validation data; acceptance uses the later test period."
+        action={<button className="button button-primary" disabled={training?.running || !readiness?.ready} onClick={train}><Cpu size={15} />{training?.running ? 'Training…' : 'Train new version'}</button>} />
+      <AccuracyFindings kind="model_upgrade" />
+      <PublicValidation kind="forecast" />
+      {readiness && <section className="card report-list-card"><div className="card-heading"><div><h2>Data readiness</h2><p>{readiness.labelled_sequences.toLocaleString('en-IN')} labelled {readiness.granularity === 'day' ? 'daily' : 'block'} sequences · {readiness.target_dates} target dates · {readiness.validated_online_cameras} validated online cameras</p></div></div>
+        {readiness.granularity === 'day' && <p className="form-hint">The public source has whole-day records. Daily training does not create or validate separate time-of-day traffic values.</p>}
+        {readiness.ready ? <p className="form-hint">Enough history to run a comparison. Improvement still needs to pass the held-out checks.</p> : <ul className="evidence-list">{readiness.reasons.map(reason=><li key={reason}>{reason}</li>)}</ul>}</section>}
       <div className="stat-row">
-        <StatTile label="Active model" value={active ? active.version.replace('hybrid-', '') : 'None'} sub={active ? `macro-F1 ${f3(active.test.macro_f1)}` : 'Forecasts use historical patterns'} />
+        <StatTile label="Active model" value={active ? modelName(active.kind) : 'None'} sub={active ? `macro-F1 ${f3(active.test.macro_f1)}` : 'Forecasts use historical patterns'} />
         <StatTile label="Versions" value={models?.length ?? '—'} />
         <StatTile label="Live forecasts checked" value={evaluation?.evaluated_count ?? 0} sub={`of ${evaluation?.prediction_count ?? 0} issued`} />
       </div>
+      {evaluation && <section className="card report-list-card"><div className="card-heading"><div><h2>Verified forecast outcomes</h2><p>{evaluation.message}</p></div></div>
+        {Object.keys(evaluation.by_model || {}).length === 0 ? <Empty title="No verified forecast outcomes yet" sub="Collect completed block observations and verify them to measure live forecast performance." /> : <div className="table-wrap"><table><thead><tr><th>Model</th><th>Checked</th><th>Accuracy</th><th>Macro-F1</th></tr></thead><tbody>
+          {Object.entries(evaluation.by_model).map(([version, result])=><tr key={version}><td>{version}{result.limited_sample && <small className="table-sub">Fewer than 30 outcomes; limited sample</small>}</td><td>{result.evaluated}</td><td>{f3(result.accuracy)}</td><td>{f3(result.macro_f1)}</td></tr>)}
+        </tbody></table></div>}</section>}
       {training?.running && <div className="model-warning"><Cpu size={16} /><span><b>Training in progress.</b> <code className="log-tail">{training.log_tail?.split('\n').filter(Boolean).slice(-1)[0]}</code></span></div>}
       <section className="card report-list-card"><div className="card-heading"><div><h2>Versions</h2><p>Select a version to see its evaluation</p></div></div>
         {models === null ? <Empty title="Loading…" /> : models.length === 0 ? <Empty title="No model trained yet" sub="Train a version once the historical dataset is in place." /> : <div className="table-wrap"><table><thead><tr><th>Version</th><th>Status</th><th>Accuracy</th><th>Macro-F1</th><th>Acceptance</th><th></th></tr></thead><tbody>
           {models.map(v => <tr key={v.version} className={selected === v.version ? 'row-highlight' : ''} onClick={() => setSelected(v.version)}>
-            <td className="road-name">{v.version}<small className="table-sub">{dateTime(v.created_at)} · {v.trained_by}</small></td>
+            <td className="road-name">{v.version}<small className="table-sub">{v.kind.startsWith('daily_') ? 'Daily · ' : ''}{modelName(v.kind)} · {dateTime(v.created_at)}{v.selected_on_validation ? ' · selected on validation' : ''}</small></td>
             <td><span className={`status-chip ${v.status === 'active' ? 'status-green' : v.status === 'rejected' ? 'status-orange' : 'status-gray'}`}><i />{v.status}</span></td>
             <td>{f3(v.test.accuracy)}</td><td>{f3(v.test.macro_f1)}</td><td>{v.acceptance.passed ? 'passed' : 'not passed'}</td>
             <td>{['candidate', 'retired'].includes(v.status) && <button className="text-action" onClick={e => { e.stopPropagation(); activate(v.version); }}>{v.status === 'retired' ? 'Roll back to this' : 'Activate'}</button>}</td></tr>)}
@@ -401,7 +420,7 @@ export function ModelsDesk({ setToast, segments }) {
       </section>
       {m && <div className="notice-layout">
         <section className="card report-list-card"><div className="card-heading"><div><h2>Test period: macro-F1</h2><p>{m.split.method}; test from {m.split.test_from}</p></div><TrendingUp className="muted-icon" /></div>
-          <ComparisonBars highlight="Hybrid model" items={[{ label: 'Hybrid model', value: m.test.macro_f1 }, ...Object.entries(m.baselines_test).map(([k, b]) => ({ label: label(k), value: b.macro_f1 })),
+          <ComparisonBars highlight={modelLabel} items={[{ label: modelLabel, value: m.test.macro_f1 }, ...Object.entries(m.baselines_test).map(([k, b]) => ({ label: label(k), value: b.macro_f1 })),
             ...(m.lstm_contribution ? [{ label: 'RF without LSTM (ablation)', value: m.lstm_contribution.rf_without_lstm_macro_f1 }] : [])]} />
           <div className="table-wrap"><table><thead><tr><th>Class</th><th>Precision</th><th>Recall</th><th>F1</th><th>Records</th></tr></thead><tbody>
             {Object.entries(m.test.per_class).map(([c, v]) => <tr key={c}><td><LevelBadge value={c} compact /></td><td>{f3(v.precision)}</td><td>{f3(v.recall)}</td><td>{f3(v.f1)}</td><td>{v.support}</td></tr>)}
@@ -410,10 +429,10 @@ export function ModelsDesk({ setToast, segments }) {
         </section>
         <section className="card report-list-card"><div className="card-heading"><div><h2>Acceptance checks</h2><p>{detail.acceptance.passed ? 'All checks passed' : 'Not accepted for live use'}</p></div><ShieldCheck className="muted-icon" /></div>
           <ul className="check-list">{detail.acceptance.checks.map(c => <li key={c.check} className={c.passed ? 'check-pass' : 'check-fail'}>{c.passed ? <Check size={14} /> : <X size={14} />} <span>{c.check}</span><small>{typeof c.value === 'number' ? `${f3(c.value)} vs ${f3(c.threshold)}` : String(c.value)}</small></li>)}</ul>
-          <div className="table-wrap"><table><thead><tr><th>Blocks ahead</th><th>Accuracy</th><th>Macro-F1</th></tr></thead><tbody>
+          <div className="table-wrap"><table><thead><tr><th>{isDaily ? 'Days ahead' : 'Blocks ahead'}</th><th>Accuracy</th><th>Macro-F1</th></tr></thead><tbody>
             {Object.entries(m.horizons_test).map(([h, v]) => <tr key={h}><td>{h}</td><td>{f3(v.accuracy)}</td><td>{f3(v.macro_f1)}</td></tr>)}</tbody></table></div>
-          <div className="table-wrap"><table><thead><tr><th>LSTM forecast</th><th>MAE</th><th>RMSE</th><th>Same-as-last MAE</th></tr></thead><tbody>
-            {Object.entries(m.lstm_regression_test).map(([k, v]) => <tr key={k}><td>{label(k)}</td><td>{f3(v.mae)}</td><td>{f3(v.rmse)}</td><td>{f3(v.persistence_mae)}</td></tr>)}</tbody></table></div>
+          {!isForest && <div className="table-wrap"><table><thead><tr><th>LSTM forecast</th><th>MAE</th><th>RMSE</th><th>Same-as-last MAE</th></tr></thead><tbody>
+            {Object.entries(m.lstm_regression_test).map(([k, v]) => <tr key={k}><td>{label(k)}</td><td>{f3(v.mae)}</td><td>{f3(v.rmse)}</td><td>{f3(v.persistence_mae)}</td></tr>)}</tbody></table></div>}
           <small className="form-hint">Transfer to similar roads: {m.transfer_validation?.reason}</small>
         </section>
       </div>}
@@ -426,13 +445,13 @@ export function ModelsDesk({ setToast, segments }) {
           <label>Road<select required value={replayForm.segment_id} onChange={e => setReplayForm({ ...replayForm, segment_id: e.target.value })}><option value="">Choose a road</option>
             {segments.filter(s => s.has_traffic_data).map(s => <option key={s.segment_id} value={s.segment_id}>{s.road}, {s.area}</option>)}</select></label>
           <label>As of date<input type="date" required value={replayForm.as_of_date} onChange={e => setReplayForm({ ...replayForm, as_of_date: e.target.value })} /></label>
-          <label>Block<select value={replayForm.as_of_time_block} onChange={e => setReplayForm({ ...replayForm, as_of_time_block: e.target.value })}>{BLOCKS.map(b => <option key={b}>{b}</option>)}</select></label>
+          <label>Block<select disabled={isDaily} value={replayForm.as_of_time_block} onChange={e => setReplayForm({ ...replayForm, as_of_time_block: e.target.value })}>{BLOCKS.map(b => <option key={b}>{b}</option>)}</select>{isDaily && <small>Daily model: the whole date is replayed.</small>}</label>
           <button className="button button-secondary" disabled={!selected}><Play size={14} /> Replay</button>
         </form>
         {replay?.error && <div className="inline-error">{replay.error}</div>}
         {replay?.steps && <div className="table-wrap"><table><thead><tr><th>Block</th><th>Predicted</th><th>Observed</th><th>Forecast volume</th><th>Observed volume</th></tr></thead><tbody>
           {replay.steps.map(s => <tr key={`${s.date}-${s.time_block}`}><td>{longDate(s.date)} {s.time_block}</td><td><LevelBadge value={s.predicted_class} compact /></td><td>{s.observed_class ? <LevelBadge value={s.observed_class} compact /> : '—'}</td>
-            <td>{Math.round(s.predicted_values.traffic_volume).toLocaleString('en-IN')}</td><td>{s.observed_values?.traffic_volume != null ? Math.round(s.observed_values.traffic_volume).toLocaleString('en-IN') : '—'}</td></tr>)}
+            <td>{s.predicted_values?.traffic_volume != null ? Math.round(s.predicted_values.traffic_volume).toLocaleString('en-IN') : '—'}</td><td>{s.observed_values?.traffic_volume != null ? Math.round(s.observed_values.traffic_volume).toLocaleString('en-IN') : '—'}</td></tr>)}
         </tbody></table><small className="form-hint">{replay.notice}</small></div>}
       </section>
     </>

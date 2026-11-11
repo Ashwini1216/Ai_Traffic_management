@@ -37,8 +37,9 @@ def test_routes_through_an_official_closure_are_restricted(client, citizen, auth
     notice = client.post("/api/incidents/official", json={"category": "road_closure", "description": "Closed for a public event",
                                                           "latitude": closed["latitude"], "longitude": closed["longitude"], "closure": True}, headers=authority).json()
     try:
-        routes = client.get("/api/routes", params=_route_query(segments, "Trinity Circle", "Anil Kumble Circle"), headers=citizen).json()["routes"]
-        assert routes[0]["restricted"] is True and any(i["closure"] for i in routes[0]["incidents"])
+        response = client.get("/api/routes", params=_route_query(segments, "Trinity Circle", "Anil Kumble Circle"), headers=citizen)
+        assert response.status_code == 409
+        assert response.json()['detail']['code'] == 'no_open_route'
     finally:
         client.patch(f"/api/incidents/{notice['incident_id']}", json={"status": "resolved"}, headers=authority)
 
@@ -80,7 +81,11 @@ def test_a_new_closure_on_a_planned_trip_notifies_the_owner_once(client, authori
         assert second["notification_id"] and "a new closure is on your route" in second["reasons"], second
         assert client.post(f"/api/trips/{trip['trip_id']}/reassess", headers=owner).json()["notification_id"] is None
         inbox = client.get("/api/notifications", headers=owner).json()
-        assert inbox["unread"] == 1 and inbox["notifications"][0]["kind"] == "closure_on_route"
+        # The initial check can also send a high-risk notice, depending on the
+        # departure block. Count notices for this closure separately.
+        closures = [item for item in inbox["notifications"] if item["kind"] == "closure_on_route"]
+        assert len(closures) == 1 and closures[0]["notification_id"] == second["notification_id"]
+        assert closures[0]["read_at"] is None
         client.post("/api/notifications/read-all", headers=owner)
         assert client.get("/api/notifications", headers=owner).json()["unread"] == 0
     finally:

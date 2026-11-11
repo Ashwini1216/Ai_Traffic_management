@@ -162,6 +162,37 @@ test('journey monitoring shows the live position and checks for a better route',
   await expect.poll(liveDots).toBe(0);
 });
 
+test('verified closures refresh routes and monitoring survives a no-open-route response', async () => {
+  const response = page.waitForResponse(r => r.url().includes('/api/routes?') && r.ok());
+  await page.getByRole('button', { name: /^Compare routes$/ }).click();
+  const routes = (await (await response).json()).routes;
+  const point = routes[0].geometry.coordinates[10];
+  const end = routes[0].geometry.coordinates.at(-1);
+  await page.getByRole('button', { name: /Start monitoring this route/ }).click();
+  await expect(page.locator('.monitor-status')).toContainText('On route');
+  const report = await api('POST','/api/incidents',{ category:'road_blockage',description:'All lanes closed at the middle of the road',latitude:point[1],longitude:point[0] },citizen);
+  let destinationClosure;
+  try {
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('.route-card')).toHaveCount(2);
+    await api('PATCH',`/api/incidents/${report.body.incident_id}`,{status:'verified',closure:true},officer);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('.route-card')).toHaveCount(1);
+    await expect(page.locator('.route-offer')).toContainText('verified road closure');
+    await page.getByRole('button',{name:'Switch to this route'}).click();
+    await expect(page.locator('.route-offer')).toHaveCount(0);
+    destinationClosure = await api('POST','/api/incidents/official',{category:'road_closure',description:'Destination access temporarily closed',latitude:end[1],longitude:end[0],closure:true},officer);
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('.route-card')).toHaveCount(0);
+    await expect(page.getByText(/No open road route was found/).first()).toBeVisible();
+    await expect(page.getByRole('button',{name:'Stop monitoring'})).toBeVisible();
+    await page.getByRole('button',{name:'Stop monitoring'}).click();
+  } finally {
+    await api('PATCH',`/api/incidents/${report.body.incident_id}`,{status:'resolved'},officer);
+    if (destinationClosure) await api('PATCH',`/api/incidents/${destinationClosure.body.incident_id}`,{status:'resolved'},officer);
+  }
+});
+
 test('an incident report carries the location and no empty strings', async () => {
   await go(page, 'Report an incident');
   await page.getByRole('button', { name: /Attach my current location/ }).click();

@@ -1,0 +1,502 @@
+{
+  "source": "https://sites.google.com/view/daweidu/projects/ua-detrac",
+  "evaluated_at": "2026-11-10T16:56:07.009974+00:00",
+  "reference": "Independent author-provided per-frame boxes and vehicle IDs. Source ignored regions applied symmetrically.",
+  "scope": "Six public Chinese traffic scenes; 15 seconds each. Not a Bengaluru camera-site calibration or all-weather guarantee.",
+  "sampling": "Actual sampled frames from round(source_fps / VIDEO_SAMPLE_FPS); reference crossing tracks use every original frame.",
+  "classes": "All vehicles combined; per-class accuracy not claimed because source/COCO taxonomies differ.",
+  "validation_selection": {
+    "settings": {
+      "weights": "yolov8s.pt",
+      "imgsz": 960,
+      "conf": 0.35,
+      "agnostic_nms": true
+    },
+    "aggregate": {
+      "frames": 376,
+      "reference_vehicle_instances": 1823,
+      "predicted_vehicle_instances": 1833,
+      "count_mae": 0.7819,
+      "count_wape": 0.1613,
+      "precision_iou50": 0.8822,
+      "recall_iou50": 0.887,
+      "f1_iou50": 0.8846,
+      "tp": 1617,
+      "fp": 216,
+      "fn": 206
+    },
+    "scenes": [
+      {
+        "sequence": "MVI_41063",
+        "split": "validation",
+        "weather": "sunny",
+        "frames": 188,
+        "reference_vehicle_instances": 1164,
+        "predicted_vehicle_instances": 1042,
+        "count_mae": 0.7979,
+        "count_wape": 0.1289,
+        "precision_iou50": 0.9319,
+        "recall_iou50": 0.8342,
+        "f1_iou50": 0.8803,
+        "tp": 971,
+        "fp": 71,
+        "fn": 193,
+        "processing_seconds": 11.94,
+        "counting_line": [
+          [
+            0.55,
+            0.15
+          ],
+          [
+            0.55,
+            1
+          ]
+        ],
+        "annotation_sha256": "6a4386eb661fb93a98d41d74c97529a1213ec8a577e9132e406a8cdc68f05d8f"
+      },
+      {
+        "sequence": "MVI_39761",
+        "split": "validation",
+        "weather": "night",
+        "frames": 188,
+        "reference_vehicle_instances": 659,
+        "predicted_vehicle_instances": 791,
+        "count_mae": 0.766,
+        "count_wape": 0.2185,
+        "precision_iou50": 0.8167,
+        "recall_iou50": 0.9803,
+        "f1_iou50": 0.891,
+        "tp": 646,
+        "fp": 145,
+        "fn": 13,
+        "processing_seconds": 11.95,
+        "counting_line": [
+          [
+            0.1,
+            0.6
+          ],
+          [
+            0.95,
+            0.6
+          ]
+        ],
+        "annotation_sha256": "31f9d57feef3a3e19b6e92e987878c91ac2e470d911b801247d1ce9de8f26177"
+      }
+    ]
+  },
+  "results": {
+    "baseline": {
+      "settings": {
+        "weights": "yolov8n.pt",
+        "imgsz": 640,
+        "conf": 0.35,
+        "agnostic_nms": false
+      },
+      "aggregate": {
+        "frames": 752,
+        "reference_vehicle_instances": 9771,
+        "predicted_vehicle_instances": 7303,
+        "count_mae": 3.3564,
+        "count_wape": 0.2583,
+        "precision_iou50": 0.9426,
+        "recall_iou50": 0.7045,
+        "f1_iou50": 0.8064,
+        "tp": 6884,
+        "fp": 419,
+        "fn": 2887,
+        "crossing_absolute_error": 11,
+        "reference_crossings": 32,
+        "distinct_count_absolute_error": 42,
+        "reference_distinct_vehicles": 86
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_39051",
+          "split": "test",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 399,
+          "predicted_vehicle_instances": 366,
+          "count_mae": 0.2606,
+          "count_wape": 0.1228,
+          "precision_iou50": 0.9372,
+          "recall_iou50": 0.8596,
+          "f1_iou50": 0.8967,
+          "tp": 343,
+          "fp": 23,
+          "fn": 56,
+          "processing_seconds": 3.78,
+          "counting_line": [
+            [
+              0.5,
+              0.35
+            ],
+            [
+              0.5,
+              1
+            ]
+          ],
+          "annotation_sha256": "c379907766c26646c08eb9716e28df055a64d7ab881aa985019ae9c0f5ccc863",
+          "reference_crossings": {
+            "in": 9,
+            "out": 0,
+            "total": 9
+          },
+          "predicted_crossings": {
+            "in": 6,
+            "out": 0,
+            "total": 6
+          },
+          "crossing_absolute_error": 3,
+          "reference_distinct_vehicles": 12,
+          "predicted_distinct_tracks": 12,
+          "distinct_count_absolute_error": 0
+        },
+        {
+          "sequence": "MVI_39501",
+          "split": "test",
+          "weather": "cloudy",
+          "frames": 188,
+          "reference_vehicle_instances": 1601,
+          "predicted_vehicle_instances": 986,
+          "count_mae": 3.484,
+          "count_wape": 0.4091,
+          "precision_iou50": 0.8996,
+          "recall_iou50": 0.554,
+          "f1_iou50": 0.6857,
+          "tp": 887,
+          "fp": 99,
+          "fn": 714,
+          "processing_seconds": 3.7,
+          "counting_line": [
+            [
+              0.1,
+              0.6
+            ],
+            [
+              0.9,
+              0.6
+            ]
+          ],
+          "annotation_sha256": "d2e519ea3e6990b7eef5ff7fbba50803c5914a0b23d6d113baa028c1a2f0e6e0",
+          "reference_crossings": {
+            "in": 12,
+            "out": 0,
+            "total": 12
+          },
+          "predicted_crossings": {
+            "in": 13,
+            "out": 0,
+            "total": 13
+          },
+          "crossing_absolute_error": 1,
+          "reference_distinct_vehicles": 23,
+          "predicted_distinct_tracks": 29,
+          "distinct_count_absolute_error": 6
+        },
+        {
+          "sequence": "MVI_40863",
+          "split": "test",
+          "weather": "rainy",
+          "frames": 188,
+          "reference_vehicle_instances": 4230,
+          "predicted_vehicle_instances": 2735,
+          "count_mae": 7.9521,
+          "count_wape": 0.3534,
+          "precision_iou50": 0.9141,
+          "recall_iou50": 0.591,
+          "f1_iou50": 0.7179,
+          "tp": 2500,
+          "fp": 235,
+          "fn": 1730,
+          "processing_seconds": 3.72,
+          "counting_line": [
+            [
+              0.55,
+              0.1
+            ],
+            [
+              0.55,
+              0.95
+            ]
+          ],
+          "annotation_sha256": "6de301580ebf482c7af4c922c6445edcd9a04469064f0d70ef0f87f44df3596b",
+          "reference_crossings": {
+            "in": 0,
+            "out": 5,
+            "total": 5
+          },
+          "predicted_crossings": {
+            "in": 0,
+            "out": 1,
+            "total": 1
+          },
+          "crossing_absolute_error": 4,
+          "reference_distinct_vehicles": 27,
+          "predicted_distinct_tracks": 51,
+          "distinct_count_absolute_error": 24
+        },
+        {
+          "sequence": "MVI_40742",
+          "split": "test",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 3541,
+          "predicted_vehicle_instances": 3216,
+          "count_mae": 1.7287,
+          "count_wape": 0.0918,
+          "precision_iou50": 0.9807,
+          "recall_iou50": 0.8907,
+          "f1_iou50": 0.9336,
+          "tp": 3154,
+          "fp": 62,
+          "fn": 387,
+          "processing_seconds": 3.73,
+          "counting_line": [
+            [
+              0.1,
+              0.65
+            ],
+            [
+              0.95,
+              0.65
+            ]
+          ],
+          "annotation_sha256": "0364d4428215e98a59264a540d2b8f7218a3b0c488bc271d093fa53d439a0610",
+          "reference_crossings": {
+            "in": 6,
+            "out": 0,
+            "total": 6
+          },
+          "predicted_crossings": {
+            "in": 3,
+            "out": 0,
+            "total": 3
+          },
+          "crossing_absolute_error": 3,
+          "reference_distinct_vehicles": 24,
+          "predicted_distinct_tracks": 36,
+          "distinct_count_absolute_error": 12
+        }
+      ]
+    },
+    "selected": {
+      "settings": {
+        "weights": "yolov8s.pt",
+        "imgsz": 960,
+        "conf": 0.35,
+        "agnostic_nms": true
+      },
+      "aggregate": {
+        "frames": 752,
+        "reference_vehicle_instances": 9771,
+        "predicted_vehicle_instances": 8472,
+        "count_mae": 2.0332,
+        "count_wape": 0.1565,
+        "precision_iou50": 0.9109,
+        "recall_iou50": 0.7898,
+        "f1_iou50": 0.846,
+        "tp": 7717,
+        "fp": 755,
+        "fn": 2054,
+        "crossing_absolute_error": 6,
+        "reference_crossings": 32,
+        "distinct_count_absolute_error": 50,
+        "reference_distinct_vehicles": 86
+      },
+      "scenes": [
+        {
+          "sequence": "MVI_39051",
+          "split": "test",
+          "weather": "sunny",
+          "frames": 188,
+          "reference_vehicle_instances": 399,
+          "predicted_vehicle_instances": 407,
+          "count_mae": 0.1596,
+          "count_wape": 0.0752,
+          "precision_iou50": 0.887,
+          "recall_iou50": 0.9048,
+          "f1_iou50": 0.8958,
+          "tp": 361,
+          "fp": 46,
+          "fn": 38,
+          "processing_seconds": 13.46,
+          "counting_line": [
+            [
+              0.5,
+              0.35
+            ],
+            [
+              0.5,
+              1
+            ]
+          ],
+          "annotation_sha256": "c379907766c26646c08eb9716e28df055a64d7ab881aa985019ae9c0f5ccc863",
+          "reference_crossings": {
+            "in": 9,
+            "out": 0,
+            "total": 9
+          },
+          "predicted_crossings": {
+            "in": 8,
+            "out": 0,
+            "total": 8
+          },
+          "crossing_absolute_error": 1,
+          "reference_distinct_vehicles": 12,
+          "predicted_distinct_tracks": 14,
+          "distinct_count_absolute_error": 2
+        },
+        {
+          "sequence": "MVI_39501",
+          "split": "test",
+          "weather": "cloudy",
+          "frames": 188,
+          "reference_vehicle_instances": 1601,
+          "predicted_vehicle_instances": 1298,
+          "count_mae": 1.8989,
+          "count_wape": 0.223,
+          "precision_iou50": 0.8151,
+          "recall_iou50": 0.6608,
+          "f1_iou50": 0.7299,
+          "tp": 1058,
+          "fp": 240,
+          "fn": 543,
+          "processing_seconds": 12.23,
+          "counting_line": [
+            [
+              0.1,
+              0.6
+            ],
+            [
+              0.9,
+              0.6
+            ]
+          ],
+          "annotation_sha256": "d2e519ea3e6990b7eef5ff7fbba50803c5914a0b23d6d113baa028c1a2f0e6e0",
+          "reference_crossings": {
+            "in": 12,
+            "out": 0,
+            "total": 12
+          },
+          "predicted_crossings": {
+            "in": 13,
+            "out": 0,
+            "total": 13
+          },
+          "crossing_absolute_error": 1,
+          "reference_distinct_vehicles": 23,
+          "predicted_distinct_tracks": 40,
+          "distinct_count_absolute_error": 17
+        },
+        {
+          "sequence": "MVI_40863",
+          "split": "test",
+          "weather": "rainy",
+          "frames": 188,
+          "reference_vehicle_instances": 4230,
+          "predicted_vehicle_instances": 3284,
+          "count_mae": 5.0319,
+          "count_wape": 0.2236,
+          "precision_iou50": 0.9147,
+          "recall_iou50": 0.7102,
+          "f1_iou50": 0.7996,
+          "tp": 3004,
+          "fp": 280,
+          "fn": 1226,
+          "processing_seconds": 12.28,
+          "counting_line": [
+            [
+              0.55,
+              0.1
+            ],
+            [
+              0.55,
+              0.95
+            ]
+          ],
+          "annotation_sha256": "6de301580ebf482c7af4c922c6445edcd9a04469064f0d70ef0f87f44df3596b",
+          "reference_crossings": {
+            "in": 0,
+            "out": 5,
+            "total": 5
+          },
+          "predicted_crossings": {
+            "in": 1,
+            "out": 5,
+            "total": 6
+          },
+          "crossing_absolute_error": 1,
+          "reference_distinct_vehicles": 27,
+          "predicted_distinct_tracks": 38,
+          "distinct_count_absolute_error": 11
+        },
+        {
+          "sequence": "MVI_40742",
+          "split": "test",
+          "weather": "night",
+          "frames": 188,
+          "reference_vehicle_instances": 3541,
+          "predicted_vehicle_instances": 3483,
+          "count_mae": 1.0426,
+          "count_wape": 0.0554,
+          "precision_iou50": 0.9457,
+          "recall_iou50": 0.9302,
+          "f1_iou50": 0.9379,
+          "tp": 3294,
+          "fp": 189,
+          "fn": 247,
+          "processing_seconds": 12.38,
+          "counting_line": [
+            [
+              0.1,
+              0.65
+            ],
+            [
+              0.95,
+              0.65
+            ]
+          ],
+          "annotation_sha256": "0364d4428215e98a59264a540d2b8f7218a3b0c488bc271d093fa53d439a0610",
+          "reference_crossings": {
+            "in": 6,
+            "out": 0,
+            "total": 6
+          },
+          "predicted_crossings": {
+            "in": 3,
+            "out": 0,
+            "total": 3
+          },
+          "crossing_absolute_error": 3,
+          "reference_distinct_vehicles": 24,
+          "predicted_distinct_tracks": 44,
+          "distinct_count_absolute_error": 20
+        }
+      ]
+    }
+  },
+  "acceptance": {
+    "passed": true,
+    "checks": {
+      "frame_count_mae_not_worse": true,
+      "detection_f1_not_worse": true,
+      "line_crossing_error_not_worse": true
+    },
+    "scope": "Frame-count and line-crossing estimates only; not distinct clip totals."
+  },
+  "software": {
+    "ultralytics": "8.4.208",
+    "torch": "2.15.0",
+    "opencv-python": "5.0.0.93",
+    "numpy": "2.3.5"
+  },
+  "weights_sha256": {
+    "yolov8n.pt": "f59b3d833e2ff32e194b5bb8e08d211dc7c5bdf144b90d2c8412c47ccfc83b36",
+    "yolov8s.pt": "1f47a78bf100391c2a140b7ac73a1caae18c32779be7d310658112f7ac9aa78a"
+  },
+  "distinct_count_validation": {
+    "passed": false,
+    "notice": "Tracker IDs can fragment and count a vehicle again. Do not present track totals as verified distinct vehicles."
+  }
+}

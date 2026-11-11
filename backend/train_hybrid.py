@@ -13,6 +13,9 @@ The Random Forest learns from LSTM forecasts made for periods the LSTM did not t
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
+import importlib.metadata
 import json
 import os
 import sys
@@ -34,6 +37,21 @@ import store
 from core import MODELS_DIR
 
 MIN_LABELLED_WINDOWS = 300
+
+
+def environment_versions():
+    """Record versions with the TensorFlow distribution used on this platform."""
+    libraries = {}
+    for name in ('numpy', 'pandas', 'scikit-learn', 'tensorflow'):
+        try:
+            libraries[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            if name != 'tensorflow':
+                raise
+            libraries[name] = importlib.metadata.version('tensorflow-cpu')
+    return libraries
+
+
 # A new version is accepted only when all of these hold on the held-out test period. The
 # baselines are the alternatives the system would otherwise use: always the most common
 # class, "same as the last block", and the road's historical time-of-day profile. The LSTM
@@ -50,10 +68,11 @@ ACCEPTANCE_RULES = {
 }
 
 
-def make_rf() -> Pipeline:
+def make_rf(min_samples_leaf=2, max_features='sqrt') -> Pipeline:
     return Pipeline([
         ("impute", SimpleImputer(strategy="median", keep_empty_features=True)),
-        ("model", RandomForestClassifier(n_estimators=300, min_samples_leaf=2, class_weight="balanced_subsample",
+        ("model", RandomForestClassifier(n_estimators=300, min_samples_leaf=min_samples_leaf,
+                                         max_features=max_features, class_weight="balanced_subsample",
                                          random_state=42, n_jobs=-1)),
     ])
 
@@ -73,7 +92,8 @@ def scores(y_true: list, y_pred: list, classes: list[str]) -> dict:
 
 
 def target_day(window: hm.Window):
-    return hm.slot_date_block(window.rows[-1]["slot"] + 1)[0]
+    grain = 'day' if window.rows[-1].get('time_block') == 'Daily' else 'block'
+    return hm.date_block_for_slot(window.rows[-1]['slot']+1,grain)[0]
 
 
 def features(windows: list[hm.Window], forecasts: list[dict] | None, classes: list[str], columns: list[str],
@@ -83,13 +103,78 @@ def features(windows: list[hm.Window], forecasts: list[dict] | None, classes: li
     return pd.DataFrame(rows, columns=columns)
 
 
-def leave_one_out_entries(windows: list[hm.Window], counts: dict) -> list[dict | None]:
-    """Training rows see their road's history without their own label (no target leakage)."""
-    entries = []
-    for w in windows:
-        entry, target = counts.get(w.segment_id), w.targets[1]
-        entries.append(patterns.without(entry, target["time_block"], patterns.day_type(target["date"]), target["label"]) if entry else None)
-    return entries
+def chronological_entries(windows: list[hm.Window], frame: pd.DataFrame) -> list[dict | None]:
+    """Each training feature sees only records strictly before its forecast target.
+
+    Removing just the row's own label still exposes labels from later training dates.
+    A growing history avoids that leakage and matches how a forecast is made in use.
+    """
+    labelled = frame[frame['label'].notna()].sort_values('slot').to_dict('records')
+    counts, entries, cursor = {}, {}, 0
+    for window in sorted(windows, key=lambda w: w.rows[-1]['slot']):
+        target_slot = window.rows[-1]['slot'] + 1
+        while cursor < len(labelled) and labelled[cursor]['slot'] < target_slot:
+            row = labelled[cursor]
+            entry = counts.setdefault(row['segment_id'], {'cell': defaultdict(Counter), 'block': defaultdict(Counter), 'all': Counter()})
+            entry['cell'][(row['time_block'], patterns.day_type(row['date']))][row['label']] += 1
+            entry['block'][row['time_block']][row['label']] += 1
+            entry['all'][row['label']] += 1
+            cursor += 1
+        entries[id(window)] = copy.deepcopy(counts.get(window.segment_id))
+    return [entries[id(window)] for window in windows]
+
+
+def training_readiness(frame=None, granularity='auto') -> dict:
+    if frame is None:
+        frame = hm.load_history() if granularity != 'day' else hm.load_daily_history()
+        if granularity == 'auto' and len([w for w in hm.build_windows(frame) if w.targets.get(1,{}).get('label')]) < MIN_LABELLED_WINDOWS:
+            daily = hm.load_daily_history()
+            if not daily.empty:
+                frame = daily
+    grain = 'day' if not frame.empty and frame.iloc[0]['time_block'] == 'Daily' else 'block'
+    windows = hm.build_windows(frame)
+    labelled = [w for w in windows if w.targets.get(1, {}).get('label')]
+    days = sorted({target_day(w) for w in labelled})
+    classes = hm.ordered_classes(frame['label'].dropna()) if not frame.empty else []
+    reasons = []
+    if len(labelled) < MIN_LABELLED_WINDOWS:
+        reasons.append(f'{len(labelled)} usable labelled sequences; at least {MIN_LABELLED_WINDOWS} are required.')
+    if len(classes) < 2:
+        reasons.append('At least two observed congestion classes are required.')
+    if len(days) < 10:
+        reasons.append('At least ten target dates are needed for chronological train, validation and test periods.')
+    if len(days) >= 10:
+        early_end = days[max(1, int(len(days) * .70 * .25))]
+        numeric_early = sum(target_day(w) < early_end and any(not hm._is_missing(w.targets[1].get(c)) for c in hm.NUMERIC)
+                            for w in labelled)
+        if numeric_early < 10:
+            reasons.append('At least ten early training sequences need measured volume, speed or travel-time index for the LSTM comparison.')
+    cameras = store.one("SELECT COUNT(*) AS n FROM cameras WHERE authorization_status='approved' AND operational_status='online' AND measurement_validated=1")
+    return {'ready': not reasons, 'reasons': reasons, 'granularity':grain, 'block_records': len(frame) if grain=='block' else 0,
+            'daily_records':len(frame) if grain=='day' else 0,'labelled_sequences': len(labelled),
+            'minimum_labelled_sequences': MIN_LABELLED_WINDOWS, 'target_dates': len(days), 'classes': classes,
+            'validated_online_cameras': cameras['n'],
+            'notice': 'Readiness is a data check. Accuracy improvement must be measured on the held-out test period.'}
+
+
+def select_forest(x_train, truth_train, x_validation, truth_validation, classes, configurations=None):
+    """Pick settings and class decision weights on validation only; never inspect test labels."""
+    trials = []
+    best = None
+    configurations = configurations or [dict(min_samples_leaf=2, max_features='sqrt'),
+                      dict(min_samples_leaf=4, max_features=.5),
+                      dict(min_samples_leaf=1, max_features=.75)]
+    for settings in configurations:
+        estimator = make_rf(**settings).fit(x_train, truth_train)
+        probabilities = hm.aligned_probabilities(estimator, x_validation, classes)
+        weights = hm.tune_decision_weights(probabilities, truth_validation, classes)
+        guess = [classes[i] for i in np.argmax(hm.apply_weights(probabilities, classes, weights), axis=1)]
+        result = scores(truth_validation, guess, classes)
+        trials.append({'settings': settings, 'validation': result, 'decision_weights': weights})
+        key = (result['macro_f1'], settings['min_samples_leaf'])
+        if best is None or key > best[0]:
+            best = (key, estimator, weights, settings)
+    return best[1], best[2], {'selected_settings': best[3], 'trials': trials, 'selection_period': 'validation only'}
 
 
 def regression_errors(windows: list[hm.Window], forecasts: list[dict]) -> dict:
@@ -193,25 +278,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--trained-by", default="command_line")
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--notes", default=None)
+    parser.add_argument('--granularity',choices=['block','day'],default='block')
     args = parser.parse_args(argv)
     started = time.time()
 
     store.initialize()
     segments.sync_segments()
-    frame = hm.load_history()
+    frame = hm.load_daily_history() if args.granularity=='day' else hm.load_history()
+    readiness = training_readiness(frame)
+    if not readiness['ready']:
+        print('Not ready to train: ' + ' '.join(readiness['reasons']), file=sys.stderr)
+        return 1
     windows = hm.build_windows(frame)
     labelled = [w for w in windows if 1 in w.targets and w.targets[1].get("label")]
     if len(labelled) < MIN_LABELLED_WINDOWS:
         print(f"Not enough history to train: {len(labelled)} labelled sequences found, {MIN_LABELLED_WINDOWS} needed.", file=sys.stderr)
         return 1
     classes = hm.ordered_classes(frame["label"].dropna())
-    days = sorted({target_day(w) for w in windows})
+    days = sorted({target_day(w) for w in labelled})
     train_end, test_start = days[int(len(days) * 0.70)], days[int(len(days) * 0.85)]
     split = {"train": [], "validation": [], "test": []}
     for window in windows:
         day = target_day(window)
         split["train" if day < train_end else "validation" if day < test_start else "test"].append(window)
-    print(f"History: {len(frame)} block records, {frame['segment_id'].nunique()} roads, {len(windows)} sequences "
+    print(f"History: {len(frame)} {'daily' if args.granularity == 'day' else 'block'} records, {frame['segment_id'].nunique()} roads, {len(windows)} sequences "
           f"(train {len(split['train'])}, validation {len(split['validation'])}, test {len(split['test'])}).")
 
     scaler = hm.StepScaler().fit(frame[frame["date"] < train_end])
@@ -221,9 +311,11 @@ def main(argv: list[str] | None = None) -> int:
     chunk_of = {id(w): sum(target_day(w) >= cut for cut in cuts) for w in train}
     out_of_fold: dict[int, dict] = {}
     for k in (1, 2, 3):
-        fold_model, _ = hm.fit_lstm([w for w in train if chunk_of[id(w)] < k], scaler, epochs=args.epochs)
+        fold_cut = cuts[k - 1]
+        fold_scaler = hm.StepScaler().fit(frame[frame['date'] < fold_cut])
+        fold_model, _ = hm.fit_lstm([w for w in train if chunk_of[id(w)] < k], fold_scaler, epochs=args.epochs)
         targets = [w for w in train if chunk_of[id(w)] == k and 1 in w.targets]
-        for window, forecast in zip(targets, hm.lstm_forecast(fold_model, [w.rows for w in targets], scaler)):
+        for window, forecast in zip(targets, hm.lstm_forecast(fold_model, [w.rows for w in targets], fold_scaler)):
             out_of_fold[id(window)] = forecast
         print(f"LSTM fold {k}/3 done.")
     lstm, epochs_run = hm.fit_lstm(train, scaler, epochs=args.epochs)
@@ -235,13 +327,19 @@ def main(argv: list[str] | None = None) -> int:
     columns, ablation_columns = hm.rf_columns(classes), hm.rf_columns(classes, with_lstm=False)
     rf_rows = [w for w in train if id(w) in out_of_fold and w.targets[1].get("label")]
     x_train = features(rf_rows, [out_of_fold[id(w)] for w in rf_rows], classes, columns,
-                       leave_one_out_entries(rf_rows, profile_counts))
+                       chronological_entries(rf_rows, history_train))
     y_train = [w.targets[1]["label"] for w in rf_rows]
-    rf = make_rf().fit(x_train[columns], y_train)
-    rf_ablation = make_rf().fit(x_train[ablation_columns], y_train)
+    validation_rows = [w for w in split['validation'] if w.targets.get(1, {}).get('label')]
+    validation_truth = [w.targets[1]['label'] for w in validation_rows]
+    validation_forecasts = hm.lstm_forecast(lstm, [w.rows for w in validation_rows], scaler)
+    x_validation = features(validation_rows, validation_forecasts, classes, columns,
+                            [profile_counts.get(w.segment_id) for w in validation_rows])
+    rf, hybrid_weights, hybrid_search = select_forest(x_train[columns], y_train, x_validation[columns], validation_truth, classes)
+    rf_ablation, rf_weights, rf_search = select_forest(x_train[ablation_columns], y_train,
+                                                      x_validation[ablation_columns], validation_truth, classes)
 
-    version = model_registry.new_version_name()
-    model = hm.HybridModel(lstm, rf, scaler, classes, columns, version)
+    version = ('daily-' if args.granularity=='day' else '') + model_registry.new_version_name()
+    model = hm.HybridModel(lstm, rf, scaler, classes, columns, version,granularity=args.granularity)
 
     def prepare(windows_: list[hm.Window]) -> dict:
         usable = [w for w in windows_ if 1 in w.targets and w.targets[1].get("label")]
@@ -263,9 +361,11 @@ def main(argv: list[str] | None = None) -> int:
     validation, test = prepare(split["validation"]), prepare(split["test"])
     # Decision weights are tuned on the validation period only, for the hybrid model and for the
     # probabilistic comparison models alike, then applied unchanged to the test period.
-    weights = {name: hm.tune_decision_weights(validation[f"{name}_p"], validation["truth"], classes)
-               for name in ("hybrid", "ablation", "profile")}
+    weights = {'hybrid': hybrid_weights, 'ablation': rf_weights,
+               'profile': hm.tune_decision_weights(validation['profile_p'], validation['truth'], classes)}
     model.weights = weights["hybrid"]
+    rf_version = version.replace('hybrid-', 'rf-', 1)
+    rf_model = hm.HybridModel(None, rf_ablation, scaler, classes, ablation_columns, rf_version, weights['ablation'],args.granularity)
 
     def decide(probabilities: np.ndarray, name: str) -> list[str]:
         return [classes[i] for i in np.argmax(hm.apply_weights(probabilities, classes, weights[name]), axis=1)]
@@ -282,19 +382,23 @@ def main(argv: list[str] | None = None) -> int:
         part["rf_without_lstm"] = scores(truth, decide(part["ablation_p"], "ablation"), classes)
 
     horizon_windows = [w for w in split["test"] if any(w.targets.get(h, {}).get("label") for h in range(1, hm.MAX_HORIZON + 1))]
-    paths = model.predict_many([w.rows for w in horizon_windows], [w.rows[-1]["slot"] for w in horizon_windows],
-                               [w.rows[-1]["road_type"] for w in horizon_windows], hm.MAX_HORIZON,
-                               [profile_counts.get(w.segment_id) for w in horizon_windows])
-    horizons = {}
-    for h in range(1, hm.MAX_HORIZON + 1):
-        truth = [w.targets[h]["label"] for w in horizon_windows if w.targets.get(h, {}).get("label")]
-        guess = [path[h - 1]["predicted_class"] for w, path in zip(horizon_windows, paths) if w.targets.get(h, {}).get("label")]
-        horizons[str(h)] = {k: v for k, v in scores(truth, guess, classes).items() if k in ("count", "accuracy", "macro_f1")}
+    def score_horizons(estimator):
+        paths = estimator.predict_many([w.rows for w in horizon_windows], [w.rows[-1]['slot'] for w in horizon_windows],
+                                       [w.rows[-1]['road_type'] for w in horizon_windows], hm.MAX_HORIZON,
+                                       [profile_counts.get(w.segment_id) for w in horizon_windows])
+        result = {}
+        for h in range(1, hm.MAX_HORIZON + 1):
+            truth = [w.targets[h]['label'] for w in horizon_windows if w.targets.get(h, {}).get('label')]
+            guess = [path[h - 1]['predicted_class'] for w, path in zip(horizon_windows, paths) if w.targets.get(h, {}).get('label')]
+            result[str(h)] = {k: v for k, v in scores(truth, guess, classes).items() if k in ('count', 'accuracy', 'macro_f1')}
+        return result
+    horizons = score_horizons(model)
+    rf_horizons = score_horizons(rf_model)
 
     active_comparison = None
     active_model, active_row = (None, None)
     try:
-        active_model, active_row = model_registry.load_active()
+        active_model, active_row = model_registry.load_active(args.granularity)
     except (OSError, ValueError) as exc:
         print(f"Active model could not be loaded for comparison: {exc}", file=sys.stderr)
     if active_model is not None and test["windows"]:
@@ -329,22 +433,57 @@ def main(argv: list[str] | None = None) -> int:
         "epochs_run": epochs_run, "training_seconds": round(time.time() - started, 1),
         "caveat": "Offline evaluation on historical records. It does not prove reliable live performance.",
     }
+    metrics['time_granularity'] = args.granularity
+    if args.granularity=='day':
+        metrics['task'] = 'Next-day congestion class from the previous six consecutive daily observations; up to three days recursively. Source severity bins are project-defined, not sensor ground truth.'
     sources = Counter(frame["source_type"])
     data = {"block_records": len(frame), "roads": int(frame["segment_id"].nunique()),
             "date_range": [str(frame["date"].min()), str(frame["date"].max())],
             "sources": dict(sources), "verified_records": int((frame["quality_status"] == "verified").sum()),
             "sequences": {k: len(v) for k, v in split.items()}, "rf_training_rows": len(rf_rows)}
+    data['time_granularity'] = args.granularity
+    if args.granularity=='day':
+        data['daily_records'] = data.pop('block_records')
+    # Record exactly what was evaluated and how candidates were selected. No test-set
+    # result is used to choose settings or switch families after the comparison.
+    fingerprint_columns = ['segment_id', 'slot', 'label', *hm.NUMERIC, 'incident_reports', 'source_type', 'quality_status']
+    data['sha256'] = hashlib.sha256(frame[fingerprint_columns].sort_values(['segment_id', 'slot']).to_csv(index=False).encode()).hexdigest()
+    selected_family = 'random_forest' if validation['rf_without_lstm']['macro_f1'] >= validation['metrics']['macro_f1'] else 'hybrid_lstm_rf'
+    experiment = {'seed': 42, 'libraries': environment_versions(),
+                  'selection_period': 'validation only', 'selected_family': selected_family,
+                  'search': {'hybrid': hybrid_search, 'random_forest': rf_search},
+                  'preprocessing': 'Each expanding LSTM fold fits its own scaler. Training profiles use only earlier records.',
+                  'class_counts': {name: dict(Counter(w.targets[1]['label'] for w in rows if w.targets.get(1, {}).get('label')))
+                                   for name, rows in split.items()}}
+    metrics['experiment'] = experiment
+    metrics['model_kind'] = model.kind
+    metrics['selected_on_validation'] = selected_family == 'hybrid_lstm_rf'
+    rf_guess = decide(test['ablation_p'], 'ablation')
+    rf_metrics = {**metrics, 'model_kind': rf_model.kind, 'selected_on_validation': selected_family == 'random_forest',
+                  'test': test['rf_without_lstm'], 'validation': validation['rf_without_lstm'],
+                  'horizons_test': rf_horizons, 'lstm_regression_test': {}, 'lstm_contribution': None,
+                  'breakdowns_test': breakdowns(test['windows'], rf_guess, classes),
+                  'task': 'Congestion class from recent blocks and calendar/history features. Numeric inputs are carried forward for later horizons; no numeric forecasts are claimed.'}
+    rf_decision = acceptance(rf_metrics['test'], test['baselines'], classes, active_comparison)
+    rf_model.save(MODELS_DIR / rf_version, {'classes': classes, 'data': data})
+    rf_status = model_registry.register(rf_version, rf_metrics, rf_decision, data, args.trained_by, args.notes, kind=rf_model.kind)
     model.save(MODELS_DIR / version, {"classes": classes, "data": data})
-    status = model_registry.register(version, metrics, decision, data, args.trained_by, args.notes)
-    if args.activate and decision["passed"]:
-        model_registry.activate(version, args.trained_by)
-        status = "active"
+    status = model_registry.register(version, metrics, decision, data, args.trained_by, args.notes,kind=model.kind)
+    for name, result, checks in ((version, metrics, decision), (rf_version, rf_metrics, rf_decision)):
+        (MODELS_DIR / name / 'benchmark.json').write_text(json.dumps({'metrics': result, 'acceptance': checks, 'data': data}, indent=2, default=str))
+    selected_version = rf_version if selected_family == 'random_forest' else version
+    selected_decision = rf_decision if selected_family == 'random_forest' else decision
+    if args.activate and selected_decision['passed']:
+        model_registry.activate(selected_version, args.trained_by)
+        if selected_version == version: status = 'active'
+        else: rf_status = 'active'
     print(json.dumps({"version": version, "status": status, "accepted": decision["passed"],
                       "test_accuracy": test["metrics"]["accuracy"], "test_macro_f1": test["metrics"]["macro_f1"],
                       "baselines_macro_f1": {n: b["macro_f1"] for n, b in test["baselines"].items()},
                       "rf_without_lstm_macro_f1": test["rf_without_lstm"]["macro_f1"],
                       "per_class_recall": {c: m["recall"] for c, m in test["metrics"]["per_class"].items()},
                       "decision_weights": weights["hybrid"], "horizons": horizons, "transfer_enabled": transfer["enabled"],
+                      "rf_version": rf_version, "rf_status": rf_status, "selected_on_validation": selected_version,
                       "failed_checks": [c["check"] for c in decision["checks"] if not c["passed"]]}, indent=2))
     return 0
 
